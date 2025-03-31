@@ -1,0 +1,5 @@
+const generateCode = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString(); // 6-значний код
+  };
+  
+  module.exports = generateCode;  
