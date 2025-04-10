@@ -2,6 +2,7 @@ const User = require("../models/User");
 const generateCode = require("../utils/generateCode");
 const sendEmail = require("../utils/sendEmail");
 const Session = require("../models/Session");
+const jwt = require("jsonwebtoken");
 
 const {
   generateAccessToken,
@@ -129,4 +130,28 @@ exports.logoutUser = async (refreshToken) => {
   }
 
   await Session.deleteOne({ refreshToken });
+};
+
+exports.refreshAccessToken = async (refreshToken) => {
+  let payload;
+
+  try {
+    payload = jwt.verify(refreshToken, process.env.REFRESH_SECRET);
+  } catch (err) {
+    throw new Error("Недійсний refresh токен.");
+  }
+
+  const session = await Session.findOne({ refreshToken });
+  if (!session) {
+    throw new Error("Сесію не знайдено.");
+  }
+
+  if (session.expiresAt < new Date()) {
+    await Session.deleteOne({ _id: session._id });
+    throw new Error("Сесія завершена. Увійдіть повторно.");
+  }
+
+  const newAccessToken = generateAccessToken(payload.userId);
+
+  return newAccessToken;
 };

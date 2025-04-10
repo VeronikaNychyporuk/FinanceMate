@@ -28,3 +28,7 @@ exports.resetPasswordSchema = Joi.object({
 exports.logoutSchema = Joi.object({
   refreshToken: Joi.string().required(),
 });
+
+exports.refreshTokenSchema = Joi.object({
+  refreshToken: Joi.string().required(),
+});

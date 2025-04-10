@@ -5,6 +5,7 @@ const {
     sendResetPasswordCode,
     resetUserPassword,
     logoutUser,
+    refreshAccessToken,
   } = require("../services/auth.service");
 
 exports.register = async (req, res) => {
@@ -72,5 +73,16 @@ exports.logout = async (req, res) => {
     res.status(200).json({ message: "Вихід успішний." });
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    const accessToken = await refreshAccessToken(refreshToken);
+    res.status(200).json({ accessToken });
+  } catch (err) {
+    res.status(401).json({ message: err.message });
   }
 };
