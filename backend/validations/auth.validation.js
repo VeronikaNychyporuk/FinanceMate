@@ -3,6 +3,7 @@ const Joi = require("joi");
 exports.registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required(),
+  name: Joi.string().min(2).max(50).optional(),
 });
 
 exports.verifyEmailSchema = Joi.object({

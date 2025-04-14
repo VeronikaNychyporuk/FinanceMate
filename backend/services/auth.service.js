@@ -20,6 +20,7 @@ exports.registerUser = async (email, password) => {
   const user = new User({
     email,
     password,
+    name,
     verificationCode,
     emailVerified: false,
   });

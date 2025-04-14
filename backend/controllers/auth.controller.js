@@ -9,10 +9,10 @@ const {
   } = require("../services/auth.service");
 
 exports.register = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, name } = req.body;
 
   try {
-    await registerUser(email, password);
+    await registerUser(email, password, name);
     res.status(201).json({
       message: "Користувача створено. Перевірте пошту для підтвердження e-mail.",
     });
