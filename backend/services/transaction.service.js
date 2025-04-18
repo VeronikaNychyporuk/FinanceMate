@@ -4,6 +4,7 @@ const Notification = require("../models/Notification");
 const Category = require("../models/Category");
 const User = require("../models/User");
 const { fetchExchangeRates } = require("./exchange.service");
+const { checkBudgetLimits } = require("../utils/transactionBudgetChecker");
 
 exports.fetchTransactions = async (userId, query) => {
   const { type, from, to, category } = query;
@@ -41,30 +42,8 @@ exports.fetchTransactionById = async (userId, transactionId) => {
 };
 
 exports.createUserTransaction = async (userId, data) => {
-  const mongoose = require("mongoose");
-  const objectUserId = new mongoose.Types.ObjectId(userId);
-
   const user = await User.findById(userId);
   if (!user) throw new Error("Користувача не знайдено.");
-
-  const txDate = new Date(data.date || Date.now());
-  const month = txDate.getMonth() + 1;
-  const year = txDate.getFullYear();
-
-  const budget = await Budget.findOne({
-    userId,
-    "period.month": month,
-    "period.year": year,
-  });
-
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 1));
-
-  const monthNames = [
-    "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
-    "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"
-  ];
-  const periodText = `${monthNames[month - 1]} ${year}`;
 
   const rates = await fetchExchangeRates();
   let amountInBaseCurrency = data.amount;
@@ -91,90 +70,8 @@ exports.createUserTransaction = async (userId, data) => {
     amountInBaseCurrency,
   });
 
-  if (data.type !== "expense" || !budget) return transaction;
+  await checkBudgetLimits(transaction);
 
-  const categoryLimit = budget.categoryLimits.find((cl) =>
-    cl.categoryId.toString() === data.categoryId.toString()
-  );
-
-  let categoryName = "";
-
-  if (categoryLimit) {
-    const category = await Category.findById(data.categoryId).select("name");
-    categoryName = category?.name || "Категорія";
-
-    const catSpentAgg = await Transaction.aggregate([
-      {
-        $match: {
-          userId: objectUserId,
-          type: "expense",
-          categoryId: new mongoose.Types.ObjectId(data.categoryId),
-          date: { $gte: start, $lt: end },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$amountInBaseCurrency" },
-        },
-      },
-    ]);
-
-    const catSpent = catSpentAgg[0]?.total || 0;
-    const catPercent = (catSpent / categoryLimit.limit) * 100;
-
-    if (catPercent >= 100) {
-      await Notification.create({
-        userId,
-        type: "budget_limit",
-        message: `Категорія "${categoryName}" у бюджеті за ${periodText} перевищила ліміт: витрачено ${catPercent.toFixed(1)}%`,
-        status: "unread",
-      });
-    } else if (catPercent >= 90) {
-      await Notification.create({
-        userId,
-        type: "budget_limit",
-        message: `Категорія "${categoryName}" у бюджеті за ${periodText} майже вичерпала ліміт: витрачено ${catPercent.toFixed(1)}%`,
-        status: "unread",
-      });
-    }
-  }
-
-  const totalAgg = await Transaction.aggregate([
-    {
-      $match: {
-        userId: objectUserId,
-        type: "expense",
-        date: { $gte: start, $lt: end },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: "$amountInBaseCurrency" },
-      },
-    },
-  ]);
-
-  const totalSpent = totalAgg[0]?.total || 0;
-  const totalPercent = (totalSpent / budget.totalLimit) * 100;
-
-  if (totalPercent >= 100) {
-    await Notification.create({
-      userId,
-      type: "budget_limit",
-      message: `Загальний бюджет за ${periodText} перевищено: витрачено ${totalPercent.toFixed(1)}%`,
-      status: "unread",
-    });
-  } else if (totalPercent >= 90) {
-    await Notification.create({
-      userId,
-      type: "budget_limit",
-      message: `Ліміт загального бюджету за ${periodText} майже вичерпано: витрачено (${totalPercent.toFixed(1)}%)`,
-      status: "unread",
-    });
-  }
-  
   return transaction;
 };
 
@@ -182,7 +79,6 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
   const transaction = await Transaction.findOne({ _id: transactionId, userId });
   if (!transaction) throw new Error("Транзакцію не знайдено або вона не ваша.");
 
-  // Оновлюємо значення
   if (updates.amount !== undefined) transaction.amount = updates.amount;
   if (updates.currency !== undefined) transaction.currency = updates.currency;
   if (updates.type !== undefined) transaction.type = updates.type;
@@ -190,11 +86,9 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
   if (updates.date !== undefined) transaction.date = new Date(updates.date);
   if (updates.note !== undefined) transaction.note = updates.note;
 
-  // Отримуємо користувача
   const user = await User.findById(userId);
   if (!user) throw new Error("Користувача не знайдено.");
 
-  // 🔁 Переобчислюємо amountInBaseCurrency
   const rates = await fetchExchangeRates();
   const from = transaction.currency;
   const to = user.currency;
@@ -215,6 +109,8 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
   transaction.amountInBaseCurrency = +amountInBase.toFixed(2);
 
   await transaction.save();
+  await checkBudgetLimits(transaction);
+
   return transaction;
 };
 
