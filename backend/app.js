@@ -7,6 +7,7 @@ const notificationRoutes = require("./routes/notification.routes");
 const exchangeRoutes = require("./routes/exchange.routes");
 const budgetRoutes = require("./routes/budget.routes");
 const categoryRoutes = require("./routes/category.routes");
+const transactionRoutes = require("./routes/transaction.routes");
 
 const app = express();
 
@@ -18,5 +19,6 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/exchange-rates", exchangeRoutes);
 app.use("/api/budgets", budgetRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 module.exports = app;

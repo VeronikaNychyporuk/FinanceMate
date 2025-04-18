@@ -12,6 +12,11 @@ const transactionSchema = new mongoose.Schema(
       required: [true, "Сума операції є обов’язковою."],
       min: [0.01, "Сума операції повинна бути більшою за 0."],
     },
+    amountInBaseCurrency: {
+      type: Number,
+      required: [true, "Сума у валюті користувача є обов’язковою."],
+      min: [0.01, "Сума повинна бути більшою за 0."],
+    },
     type: {
       type: String,
       enum: {

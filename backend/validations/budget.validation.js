@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 
 exports.createBudgetSchema = Joi.object({
   totalLimit: Joi.number().min(0.01).required(),
-  currency: Joi.string().valid("UAH", "USD", "EUR").required(),
   period: Joi.object({
     month: Joi.number().min(1).max(12).required(),
     year: Joi.number().min(2000).required(),
@@ -25,7 +24,6 @@ exports.createBudgetSchema = Joi.object({
 
 exports.updateBudgetSchema = Joi.object({
   totalLimit: Joi.number().min(0.01).optional(),
-  currency: Joi.string().valid("UAH", "USD", "EUR").optional(),
   period: Joi.object({
     month: Joi.number().min(1).max(12).required(),
     year: Joi.number().min(2000).required(),
@@ -36,4 +34,4 @@ exports.updateBudgetSchema = Joi.object({
       limit: Joi.number().min(0.01).required(),
     })
   ).optional(),
-}).or("totalLimit", "currency", "period", "categoryLimits");
+}).or("totalLimit", "period", "categoryLimits");

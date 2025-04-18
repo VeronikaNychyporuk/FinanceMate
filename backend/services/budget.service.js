@@ -40,7 +40,6 @@ exports.createUserBudget = async (userId, data) => {
   const budget = await Budget.create({
     userId,
     totalLimit: data.totalLimit,
-    currency: data.currency,
     period: data.period,
     categoryLimits: data.categoryLimits || [],
   });
@@ -83,7 +82,6 @@ exports.updateUserBudget = async (userId, budgetId, updates) => {
 
   // 🛠 Оновлення полів
   if (updates.totalLimit !== undefined) budget.totalLimit = updates.totalLimit;
-  if (updates.currency !== undefined) budget.currency = updates.currency;
   if (updates.period !== undefined) budget.period = updates.period;
   if (updates.categoryLimits !== undefined) budget.categoryLimits = updates.categoryLimits;
 
@@ -112,25 +110,22 @@ exports.generateBudgetOverview = async (userId, month, year) => {
     throw new Error("Бюджет не знайдено.");
   }
 
-  // Діапазон дат
   const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 1); // початок наступного місяця
+  const endDate = new Date(year, month, 1);
 
-  // Отримуємо витратні транзакції користувача за цей період
   const transactions = await Transaction.find({
     userId,
     type: "expense",
     date: { $gte: startDate, $lt: endDate },
   });
 
-  // Групуємо витрати по категоріях
+  // ✅ Групуємо по категоріях за amountInBaseCurrency
   const expensesByCategory = transactions.reduce((acc, tx) => {
     const catId = tx.categoryId.toString();
-    acc[catId] = (acc[catId] || 0) + tx.amount;
+    acc[catId] = (acc[catId] || 0) + tx.amountInBaseCurrency;
     return acc;
   }, {});
 
-  // Створюємо результат по кожній категорії бюджету
   const categories = budget.categoryLimits.map((limit) => {
     const cat = limit.categoryId;
     const spent = expensesByCategory[cat._id.toString()] || 0;
@@ -141,7 +136,7 @@ exports.generateBudgetOverview = async (userId, month, year) => {
       name: cat.name,
       icon: cat.icon,
       limit: limit.limit,
-      spent,
+      spent: +spent.toFixed(2),
       percentage: Number(percentage),
       exceeded: spent > limit.limit,
     };
@@ -153,9 +148,8 @@ exports.generateBudgetOverview = async (userId, month, year) => {
 
   return {
     period: budget.period,
-    currency: budget.currency,
     totalLimit,
-    totalSpent,
+    totalSpent: +totalSpent.toFixed(2),
     totalPercentage: Number(totalPercentage),
     exceeded: totalSpent > totalLimit,
     categories,

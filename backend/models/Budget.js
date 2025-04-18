@@ -12,14 +12,6 @@ const budgetSchema = new mongoose.Schema(
       required: [true, "Загальний ліміт бюджету є обов’язковим."],
       min: [0.01, "Загальний ліміт повинен бути більшим за 0."],
     },
-    currency: {
-      type: String,
-      enum: {
-        values: ["UAH", "USD", "EUR"],
-        message: "Непідтримувана валюта. Дозволені значення: UAH, USD, EUR.",
-      },
-      default: "UAH",
-    },
     period: {
       month: {
         type: Number,
