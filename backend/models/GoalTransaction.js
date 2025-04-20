@@ -18,6 +18,19 @@ const goalTransactionSchema = new mongoose.Schema(
       required: [true, "Сума операції є обов’язковою."],
       min: [0.01, "Сума операції повинна бути більшою за 0."],
     },
+    currency: {
+      type: String,
+      enum: {
+        values: ["UAH", "USD", "EUR"],
+        message: "Підтримуються лише валюти: UAH, USD, EUR.",
+      },
+      required: [true, "Валюта операції є обов’язковою."],
+    },
+    amountInBaseCurrency: {
+      type: Number,
+      required: [true, "Сума у валюті користувача є обов’язковою."],
+      min: [0.01, "Сума повинна бути більшою за 0."],
+    },
     type: {
       type: String,
       enum: {
@@ -29,6 +42,10 @@ const goalTransactionSchema = new mongoose.Schema(
     date: {
       type: Date,
       default: Date.now,
+    },
+    note: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true }
@@ -45,6 +62,14 @@ goalTransactionSchema.post("save", async function (doc, next) {
         goal.currentAmount -= doc.amount;
         if (goal.currentAmount < 0) {
           goal.currentAmount = 0; // Запобігає від'ємному балансу
+        
+          // Створення системного сповіщення
+          await Notification.create({
+            userId: doc.userId,
+            type: "system",
+            message: `Сума зняття перевищує баланс цілі "${goal.name}". Поточна сума обнулена.`,
+            status: "unread",
+          });
         }
       }
       await goal.save();
