@@ -23,6 +23,6 @@ app.use("/api/budgets", budgetRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/goals", goalRoutes);
-app.use("/api/goals/:id/transactions", goalTransactionRoutes);
+app.use("/api/goals/:goalId/transactions", goalTransactionRoutes);
 
 module.exports = app;
