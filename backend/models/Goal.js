@@ -39,9 +39,19 @@ const goalSchema = new mongoose.Schema(
 );
 
 // Автоматичне оновлення статусу цілі при зміні суми накопичення
-goalSchema.pre("save", function (next) {
+goalSchema.pre("save", async function (next) {
   if (this.currentAmount >= this.targetAmount) {
     this.status = "achieved";
+
+    if (this.isModified("status")) {
+      const Notification = require("../models/Notification");
+      await Notification.create({
+        userId: this.userId,
+        type: "goal_progress",
+        message: `Вітаємо! Ціль "${this.name}" досягнута.`,
+        status: "unread",
+      });
+    }
   }
   next();
 });

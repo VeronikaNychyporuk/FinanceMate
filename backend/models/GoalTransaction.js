@@ -51,35 +51,6 @@ const goalTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Автоматичне оновлення currentAmount у Goal при додаванні операції
-goalTransactionSchema.post("save", async function (doc, next) {
-  try {
-    const goal = await Goal.findById(doc.goalId);
-    if (goal) {
-      if (doc.type === "deposit") {
-        goal.currentAmount += doc.amount;
-      } else if (doc.type === "withdrawal") {
-        goal.currentAmount -= doc.amount;
-        if (goal.currentAmount < 0) {
-          goal.currentAmount = 0; // Запобігає від'ємному балансу
-        
-          // Створення системного сповіщення
-          await Notification.create({
-            userId: doc.userId,
-            type: "system",
-            message: `Сума зняття перевищує баланс цілі "${goal.name}". Поточна сума обнулена.`,
-            status: "unread",
-          });
-        }
-      }
-      await goal.save();
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
 const GoalTransaction = mongoose.model("GoalTransaction", goalTransactionSchema);
 
 module.exports = GoalTransaction;
