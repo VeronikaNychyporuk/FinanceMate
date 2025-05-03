@@ -9,7 +9,7 @@ const {
   generateRefreshToken,
 } = require("../utils/generateTokens");
 
-exports.registerUser = async (email, password) => {
+exports.registerUser = async (email, password, name) => {
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     throw new Error("Користувач з таким email вже існує.");
@@ -54,6 +54,28 @@ exports.verifyUserEmail = async (email, code) => {
   await user.save();
 };
 
+exports.resendVerificationCode = async (email) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new Error("Користувача не знайдено.");
+  }
+
+  if (user.emailVerified) {
+    throw new Error("Email вже підтверджено.");
+  }
+
+  const verificationCode = generateCode();
+  user.verificationCode = verificationCode;
+  await user.save();
+
+  const message = `Щоб підтвердити вашу електронну пошту для FinanceMate, введіть код підтвердження:\n\n${verificationCode}\n\nЯкщо ви не реєструвались, просто ігноруйте цей лист.\n\n\nЗ найкращими побажаннями,\nКоманда FinanceMate!`;
+
+  await sendEmail(email, "Підтвердження email", message);
+
+  return { success: true };
+};
+
 exports.loginUser = async (email, password) => {
   const user = await User.findOne({ email });
 
@@ -67,7 +89,10 @@ exports.loginUser = async (email, password) => {
   }
 
   if (!user.emailVerified) {
-    throw new Error("Електронну адресу не підтверджено.");
+    // Якщо не підтверджено — повертаємо статус і прапорець
+    return {
+      emailConfirmed: false,
+    };
   }
 
   const accessToken = generateAccessToken(user._id);
@@ -84,6 +109,7 @@ exports.loginUser = async (email, password) => {
   return {
     accessToken,
     refreshToken,
+    emailConfirmed: true,
   };
 };
 

@@ -1,6 +1,7 @@
 const {
     registerUser,
     verifyUserEmail,
+    resendVerificationCode,
     loginUser,
     sendResetPasswordCode,
     resetUserPassword,
@@ -29,6 +30,17 @@ exports.verifyEmail = async (req, res) => {
     res.status(200).json({ message: "Email підтверджено успішно." });
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+};
+
+exports.resendVerificationCode = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    await resendVerificationCode(email);
+    res.status(200).json({ success: true, message: "Код підтвердження надіслано на електронну адресу." });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 

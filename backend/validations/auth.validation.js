@@ -1,14 +1,19 @@
 const Joi = require("joi");
 
 exports.registerSchema = Joi.object({
+  name: Joi.string().min(2).max(50).required(),
   email: Joi.string().email().required(),
   password: Joi.string().required(),
-  name: Joi.string().min(2).max(50).optional(),
+  currency: Joi.string().valid("UAH", "USD", "EUR").required(),  // ➡️ ДОДАЄМО ЦЕ
 });
 
 exports.verifyEmailSchema = Joi.object({
   email: Joi.string().email().required(),
   code: Joi.string().length(6).required(),
+});
+
+exports.resendVerificationCodeSchema = Joi.object({
+  email: Joi.string().email().required(),
 });
 
 exports.loginSchema = Joi.object({
