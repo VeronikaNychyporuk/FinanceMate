@@ -30,11 +30,3 @@ exports.resetPasswordSchema = Joi.object({
   code: Joi.string().length(6).required(),
   newPassword: Joi.string().required(),
 });
-
-exports.logoutSchema = Joi.object({
-  refreshToken: Joi.string().required(),
-});
-
-exports.refreshTokenSchema = Joi.object({
-  refreshToken: Joi.string().required(),
-});

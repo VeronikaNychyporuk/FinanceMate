@@ -1,13 +1,8 @@
 const User = require("../models/User");
 const generateCode = require("../utils/generateCode");
 const sendEmail = require("../utils/sendEmail");
-const Session = require("../models/Session");
 const jwt = require("jsonwebtoken");
-
-const {
-  generateAccessToken,
-  generateRefreshToken,
-} = require("../utils/generateTokens");
+const {generateAccessToken,} = require("../utils/generateTokens");
 
 exports.registerUser = async (email, password, name) => {
   const existingUser = await User.findOne({ email });
@@ -96,19 +91,9 @@ exports.loginUser = async (email, password) => {
   }
 
   const accessToken = generateAccessToken(user._id);
-  const refreshToken = generateRefreshToken(user._id);
-
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 днів
-
-  await Session.create({
-    userId: user._id,
-    refreshToken,
-    expiresAt,
-  });
 
   return {
     accessToken,
-    refreshToken,
     emailConfirmed: true,
   };
 };
@@ -147,38 +132,4 @@ exports.resetUserPassword = async (email, code, newPassword) => {
   user.resetPasswordToken = undefined;
 
   await user.save();
-};
-
-exports.logoutUser = async (refreshToken) => {
-  const session = await Session.findOne({ refreshToken });
-
-  if (!session) {
-    throw new Error("Сесії з таким токеном не знайдено.");
-  }
-
-  await Session.deleteOne({ refreshToken });
-};
-
-exports.refreshAccessToken = async (refreshToken) => {
-  let payload;
-
-  try {
-    payload = jwt.verify(refreshToken, process.env.REFRESH_SECRET);
-  } catch (err) {
-    throw new Error("Недійсний refresh токен.");
-  }
-
-  const session = await Session.findOne({ refreshToken });
-  if (!session) {
-    throw new Error("Сесію не знайдено.");
-  }
-
-  if (session.expiresAt < new Date()) {
-    await Session.deleteOne({ _id: session._id });
-    throw new Error("Сесія завершена. Увійдіть повторно.");
-  }
-
-  const newAccessToken = generateAccessToken(payload.userId);
-
-  return newAccessToken;
 };

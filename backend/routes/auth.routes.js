@@ -8,8 +8,6 @@ const {
     login,
     forgotPassword,
     resetPassword,
-    logout,
-    refreshToken,
   } = require("../controllers/auth.controller");
 
   const {
@@ -19,8 +17,6 @@ const {
     loginSchema,
     forgotPasswordSchema,
     resetPasswordSchema,
-    logoutSchema,
-    refreshTokenSchema,
   } = require("../validations/auth.validation");
   
 const validateRequest = require("../middlewares/validateRequest");
@@ -31,7 +27,5 @@ router.post("/resend-verification-code", validateRequest(resendVerificationCodeS
 router.post("/login", validateRequest(loginSchema), login);
 router.post("/forgot-password", validateRequest(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validateRequest(resetPasswordSchema), resetPassword);
-router.post("/logout", validateRequest(logoutSchema), logout);
-router.post("/refresh-token", validateRequest(refreshTokenSchema), refreshToken);
 
 module.exports = router;
