@@ -5,6 +5,8 @@ import RegisterPage from '../features/RegisterPage';
 import EmailVerificationPage from '../features/EmailVerificationPage';
 import ForgotPasswordPage from '../features/ForgotPasswordPage';
 import ResetPasswordPage from '../features/ResetPasswordPage';
+import DashboardPage from '../features/DashboardPage';
+import Layout from '../components/Layout';
 
 function AppRouter() {
   return (
@@ -15,6 +17,7 @@ function AppRouter() {
       <Route path="/verify-email" element={<EmailVerificationPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/dashboard" element={<Layout><DashboardPage /></Layout>}/>
     </Routes>
   );
 }
