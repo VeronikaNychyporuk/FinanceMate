@@ -32,15 +32,15 @@ export default function Layout({ children }) {
   const handleProfileAction = (action) => {
     handleClose();
     if (action === 'logout') {
-      // Додай свій logout-обробник
-      console.log('Logout');
+      localStorage.removeItem('accessToken');
+      navigate('/');
     } else {
       navigate(`/${action}`);
     }
   };
 
   const navItems = [
-    { label: 'Дашборти', icon: <Dashboard />, path: '/dashboard' },
+    { label: 'Аналітика', icon: <Dashboard />, path: '/dashboard' },
     { label: 'Бюджет', icon: <AccountBalanceWallet />, path: '/budgets' },
     { label: 'Транзакції', icon: <ListAlt />, path: '/transactions' },
     { label: 'Цілі', icon: <Flag />, path: '/goals' }
@@ -148,7 +148,7 @@ export default function Layout({ children }) {
 
       {/* Основний контент */}
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Toolbar /> {/* для відступу під navbar */}
+        <Toolbar />
         {children}
       </Box>
     </Box>

@@ -52,7 +52,7 @@ function LoginPage() {
         return;
       }
 
-      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("accessToken", response.data.accessToken);
       navigate("/dashboard");
     } catch (error) {
       setServerError(

@@ -7,8 +7,9 @@ import ForgotPasswordPage from '../features/ForgotPasswordPage';
 import ResetPasswordPage from '../features/ResetPasswordPage';
 import DashboardPage from '../features/DashboardPage';
 import Layout from '../components/Layout';
+import PrivateRoute from '../components/PrivateRoute';
 
-function AppRouter() {
+function AppRouter() {  
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -17,7 +18,7 @@ function AppRouter() {
       <Route path="/verify-email" element={<EmailVerificationPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/dashboard" element={<Layout><DashboardPage /></Layout>}/>
+      <Route path="/dashboard" element={<PrivateRoute><Layout><DashboardPage /></Layout></PrivateRoute>}/>
     </Routes>
   );
 }
