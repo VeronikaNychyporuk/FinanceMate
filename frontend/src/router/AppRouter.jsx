@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+
 import LandingPage from '../features/LandingPage';
 import LoginPage from '../features/LoginPage';
 import RegisterPage from '../features/RegisterPage';
@@ -6,6 +7,9 @@ import EmailVerificationPage from '../features/EmailVerificationPage';
 import ForgotPasswordPage from '../features/ForgotPasswordPage';
 import ResetPasswordPage from '../features/ResetPasswordPage';
 import DashboardPage from '../features/DashboardPage';
+import ProfilePage from '../features/ProfilePage';
+import EditProfilePage from '../features/EditProfilePage';
+
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
 
@@ -19,6 +23,8 @@ function AppRouter() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/dashboard" element={<PrivateRoute><Layout><DashboardPage /></Layout></PrivateRoute>}/>
+      <Route path="/profile" element={<PrivateRoute><Layout><ProfilePage /></Layout></PrivateRoute>}/>
+      <Route path="/settings" element={<PrivateRoute><Layout><EditProfilePage /></Layout></PrivateRoute>}/>
     </Routes>
   );
 }
