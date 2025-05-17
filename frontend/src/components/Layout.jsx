@@ -7,6 +7,9 @@ import {
   Menu as MenuIcon, Notifications, AccountCircle,
   Dashboard, AccountBalanceWallet, ListAlt, Flag
 } from '@mui/icons-material';
+import {
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
@@ -16,6 +19,7 @@ export default function Layout({ children }) {
   const [open, setOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
   const handleDrawerToggle = () => {
     setOpen(!open);
@@ -32,11 +36,16 @@ export default function Layout({ children }) {
   const handleProfileAction = (action) => {
     handleClose();
     if (action === 'logout') {
-      localStorage.removeItem('accessToken');
-      navigate('/');
+      setLogoutDialogOpen(true);
     } else {
       navigate(`/${action}`);
     }
+  };
+
+  const handleLogoutConfirm = () => {
+    localStorage.removeItem('accessToken');
+    setLogoutDialogOpen(false);
+    navigate('/');
   };
 
   const navItems = [
@@ -151,6 +160,52 @@ export default function Layout({ children }) {
         <Toolbar />
         {children}
       </Box>
+
+      {/* Попап підтвердження виходу */}
+      <Dialog
+        open={logoutDialogOpen}
+        onClose={() => setLogoutDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#2d2d2d',
+            color: '#fff',
+            borderRadius: 3,
+            p: 2,
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+          Підтвердження виходу
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: '#e0e0e0' }}>
+            Ви дійсно хочете вийти з акаунту?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'flex-end' }}>
+          <Button
+            onClick={() => setLogoutDialogOpen(false)}
+            sx={{
+              color: '#fff',
+              borderColor: '#fff',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.1)'
+              }
+            }}
+          >
+            Скасувати
+          </Button>
+          <Button
+            onClick={handleLogoutConfirm}
+            variant="contained"
+            color="error"
+            sx={{ ml: 1 }}
+          >
+            Вийти
+          </Button>
+        </DialogActions>
+      </Dialog>
+
     </Box>
   );
 }
