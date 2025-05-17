@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useBeforeUnload } from 'react-router-dom';
+import {
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button
+} from '@mui/material';
 
 export default function EditProfilePage() {
   const [initialData, setInitialData] = useState(null);
@@ -11,17 +14,17 @@ export default function EditProfilePage() {
   const [errors, setErrors] = useState({});
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   const navigate = useNavigate();
 
   const hasChanges = () => {
     return (
       (initialData && name !== initialData.name) ||
-      (initialData && currency !== initialData.currency) ||
       newPassword || currentPassword
     );
   };
 
-  // блокування переходу при незбережених змінах
   useBeforeUnload((e) => {
     if (hasChanges()) {
       e.preventDefault();
@@ -31,12 +34,15 @@ export default function EditProfilePage() {
 
   const handleNavigateBack = () => {
     if (hasChanges()) {
-      if (window.confirm('Ви маєте незбережені зміни. Вийти без збереження?')) {
-        navigate('/profile');
-      }
+      setIsDialogOpen(true);
     } else {
       navigate('/profile');
     }
+  };
+
+  const confirmNavigate = () => {
+    setIsDialogOpen(false);
+    navigate('/profile');
   };
 
   useEffect(() => {
@@ -186,6 +192,51 @@ export default function EditProfilePage() {
           Зберегти
         </button>
       </div>
+
+      {/* Підтвердження виходу без збереження */}
+      <Dialog
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#2d2d2d',
+            color: '#fff',
+            borderRadius: 3,
+            p: 2,
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+          Незбережені зміни
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: '#e0e0e0' }}>
+            Ви маєте незбережені зміни. Вийти без збереження?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'flex-end' }}>
+          <Button
+            onClick={() => setIsDialogOpen(false)}
+            sx={{
+              color: '#fff',
+              borderColor: '#fff',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              }
+            }}
+          >
+            Скасувати
+          </Button>
+          <Button
+            onClick={confirmNavigate}
+            variant="contained"
+            color="error"
+            sx={{ ml: 1 }}
+          >
+            Вийти
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }

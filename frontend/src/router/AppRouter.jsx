@@ -9,6 +9,7 @@ import ResetPasswordPage from '../features/ResetPasswordPage';
 import DashboardPage from '../features/DashboardPage';
 import ProfilePage from '../features/ProfilePage';
 import EditProfilePage from '../features/EditProfilePage';
+import NotificationsPage from '../features/NotificationsPage';
 
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
@@ -25,6 +26,7 @@ function AppRouter() {
       <Route path="/dashboard" element={<PrivateRoute><Layout><DashboardPage /></Layout></PrivateRoute>}/>
       <Route path="/profile" element={<PrivateRoute><Layout><ProfilePage /></Layout></PrivateRoute>}/>
       <Route path="/settings" element={<PrivateRoute><Layout><EditProfilePage /></Layout></PrivateRoute>}/>
+      <Route path="/notifications" element={<PrivateRoute><Layout><NotificationsPage /></Layout></PrivateRoute>}/>
     </Routes>
   );
 }

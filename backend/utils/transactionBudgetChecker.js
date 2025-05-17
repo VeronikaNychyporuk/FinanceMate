@@ -105,7 +105,7 @@ exports.checkBudgetLimits = async (transaction) => {
     await Notification.create({
       userId,
       type: "budget_limit",
-      message: `Ліміт загального бюджету за ${periodText} майже вичерпано: витрачено (${totalPercent.toFixed(1)}%)`,
+      message: `Ліміт загального бюджету за ${periodText} майже вичерпано: витрачено ${totalPercent.toFixed(1)}%`,
       status: "unread",
     });
   }

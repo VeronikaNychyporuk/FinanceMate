@@ -37,7 +37,6 @@ export default function ExchangeRates() {
       <h2 className="text-lg font-semibold text-gray-800 mb-2">Курс валют</h2>
       <p className="text-gray-700">USD: {rates.USD.toFixed(2)} грн</p>
       <p className="text-gray-700">EUR: {rates.EUR.toFixed(2)} грн</p>
-      <p className="text-sm text-gray-500 mt-1">станом на {rates.date}</p>
     </div>
   );
 }

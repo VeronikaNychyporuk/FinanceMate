@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import ExchangeRates from './ExchangeRates';
+
 import {
   AppBar, Toolbar, IconButton, Typography, Drawer, List, ListItemButton,
   ListItemIcon, ListItemText, Menu, MenuItem, Box
@@ -20,6 +23,7 @@ export default function Layout({ children }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
 
   const handleDrawerToggle = () => {
     setOpen(!open);
@@ -55,6 +59,32 @@ export default function Layout({ children }) {
     { label: 'Цілі', icon: <Flag />, path: '/goals' }
   ];
 
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+
+    const fetchNotifications = () => {
+      axios.get('http://localhost:5000/api/notifications', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => {
+          const has = res.data.some(n => n.status === 'unread');
+          setHasUnread(has);
+        })
+        .catch(() => {
+          setHasUnread(false); // при помилці приховуємо крапку
+        });
+    };
+
+    // перше завантаження
+    fetchNotifications();
+
+    // запуск кожні 60 секунд
+    const interval = setInterval(fetchNotifications, 30000);
+
+    // очищення при виході
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <Box sx={{ display: 'flex' }}>
       {/* Верхній navbar */}
@@ -80,16 +110,20 @@ export default function Layout({ children }) {
           </div>
           <div>
             <IconButton
-                color="inherit"
-                onClick={() => navigate('/notifications')}
-                sx={{
-                    '&:hover': {
-                        backgroundColor: 'rgba(255,255,255,0.1)',
-                    },
-                    transition: 'background-color 0.2s ease'
-                }}
+              color="inherit"
+              onClick={() => navigate('/notifications')}
+              sx={{
+                position: 'relative',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                },
+                transition: 'background-color 0.2s ease'
+              }}
             >
-                <Notifications />
+              <Notifications />
+              {hasUnread && (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-600 rounded-full ring-1 ring-white" />
+              )}
             </IconButton>
 
             <IconButton
@@ -130,6 +164,8 @@ export default function Layout({ children }) {
             backgroundColor: '#212529',
             color: 'white',
             boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
           },
         }}
       >
@@ -146,13 +182,17 @@ export default function Layout({ children }) {
                 transition: 'background-color 0.2s ease'
               }}
             >
-              <ListItemIcon sx={{ color: 'white' }}>
+              <ListItemIcon sx={{ color: 'white', fontFamily: "'Libre Bodoni', serif"}}>
                 {item.icon}
               </ListItemIcon>
               <ListItemText primary={item.label} />
             </ListItemButton>
           ))}
         </List>
+
+        <Box sx={{ mt: 'auto', p: 2 }}>
+          <ExchangeRates />
+        </Box>
       </Drawer>
 
       {/* Основний контент */}
