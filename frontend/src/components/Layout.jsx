@@ -122,7 +122,7 @@ export default function Layout({ children }) {
             >
               <Notifications />
               {hasUnread && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-600 rounded-full ring-1 ring-white" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-600 rounded-full" />
               )}
             </IconButton>
 
