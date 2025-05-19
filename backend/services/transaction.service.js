@@ -81,11 +81,21 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
 
   if (updates.amount !== undefined) transaction.amount = updates.amount;
   if (updates.currency !== undefined) transaction.currency = updates.currency;
-  if (updates.type !== undefined) transaction.type = updates.type;
-  if (updates.categoryId !== undefined) transaction.categoryId = updates.categoryId;
+  if (updates.categoryId !== undefined) {
+    transaction.categoryId = updates.categoryId;
+
+    // 🔁 Якщо змінилася категорія — перевірити її тип
+    const newCategory = await Category.findById(updates.categoryId);
+    if (!newCategory) throw new Error("Нову категорію не знайдено.");
+
+    if (newCategory.type !== transaction.type) {
+      transaction.type = newCategory.type;
+    }
+  }
   if (updates.date !== undefined) transaction.date = new Date(updates.date);
   if (updates.note !== undefined) transaction.note = updates.note;
 
+  // 🔁 Перерахунок валюти
   const user = await User.findById(userId);
   if (!user) throw new Error("Користувача не знайдено.");
 

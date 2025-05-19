@@ -23,7 +23,6 @@ exports.createUserCategory = async (userId, data) => {
     userId,
     name: data.name.trim(),
     type: data.type,
-    icon: data.icon || "",
   });
 
   return category;
@@ -51,7 +50,6 @@ exports.updateUserCategory = async (userId, categoryId, updates) => {
 
   if (updates.name !== undefined) category.name = updates.name;
   if (updates.type !== undefined) category.type = updates.type;
-  if (updates.icon !== undefined) category.icon = updates.icon;
 
   await category.save();
   return category;

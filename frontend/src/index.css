@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Tremor calendar – disabled days */
+.rdp-day_disabled {
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+.rdp {
+  background-color: white !important;
+  border: 1px solid #e5e7eb; /* Tailwind border-gray-300 */
+  border-radius: 0.5rem;      /* rounded-md */
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 1rem;
+}

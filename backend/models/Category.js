@@ -20,11 +20,6 @@ const categorySchema = new mongoose.Schema(
       },
       required: [true, "Тип категорії є обов’язковим."],
     },
-    icon: {
-      type: String,
-      trim: true,
-      default: "", // вказувати або колір або назву іконки (наприклад, "shopping-cart", "restaurant")
-    },
   },
   { timestamps: true }
 );

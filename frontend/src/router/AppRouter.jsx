@@ -10,6 +10,9 @@ import DashboardPage from '../features/DashboardPage';
 import ProfilePage from '../features/ProfilePage';
 import EditProfilePage from '../features/EditProfilePage';
 import NotificationsPage from '../features/NotificationsPage';
+import TransactionsPage from '../features/TransactionsPage';
+import AddTransactionPage from '../features/AddTransactionPage';
+import EditTransactionPage from '../features/EditTransactionPage';
 
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
@@ -27,6 +30,9 @@ function AppRouter() {
       <Route path="/profile" element={<PrivateRoute><Layout><ProfilePage /></Layout></PrivateRoute>}/>
       <Route path="/settings" element={<PrivateRoute><Layout><EditProfilePage /></Layout></PrivateRoute>}/>
       <Route path="/notifications" element={<PrivateRoute><Layout><NotificationsPage /></Layout></PrivateRoute>}/>
+      <Route path="/transactions" element={<PrivateRoute><Layout><TransactionsPage /></Layout></PrivateRoute>}/>
+      <Route path="/transactions/new" element={<PrivateRoute><Layout><AddTransactionPage /></Layout></PrivateRoute>}/>
+      <Route path="/transactions/edit/:id" element={<PrivateRoute><Layout><EditTransactionPage /></Layout></PrivateRoute>}/>
     </Routes>
   );
 }

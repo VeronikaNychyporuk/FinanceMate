@@ -11,7 +11,6 @@ exports.createTransactionSchema = Joi.object({
 
 exports.updateTransactionSchema = Joi.object({
   amount: Joi.number().min(0.01).optional(),
-  type: Joi.string().valid("income", "expense").optional(),
   categoryId: Joi.string().optional(),
   currency: Joi.string().valid("UAH", "USD", "EUR").optional(),
   date: Joi.date().optional(),
