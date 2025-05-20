@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TextField, MenuItem, Button, Autocomplete
+  TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { DatePicker } from '@tremor/react';
 import dayjs from 'dayjs';
@@ -18,6 +18,8 @@ export default function AddTransactionPage() {
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
   const [openCategoryModal, setOpenCategoryModal] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isTouched, setIsTouched] = useState(false);
 
   const navigate = useNavigate();
 
@@ -37,6 +39,17 @@ export default function AddTransactionPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const hasChanges =
+      amount !== '' ||
+      currency !== 'UAH' ||
+      note.trim() !== '' ||
+      selectedCategory !== null ||
+      !dayjs(date).isSame(dayjs(), 'day');
+
+    setIsTouched(hasChanges);
+  }, [amount, currency, selectedCategory, note, date]);
+
   const validate = () => {
     const newErrors = {};
     if (!amount || isNaN(amount) || Number(amount) <= 0) {
@@ -50,7 +63,6 @@ export default function AddTransactionPage() {
 
   const handleSubmit = async () => {
     const token = localStorage.getItem('accessToken');
-    
     setErrors({});
     setSubmitError('');
     const validationErrors = validate();
@@ -79,6 +91,14 @@ export default function AddTransactionPage() {
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити транзакцію';
       setSubmitError(msg);
+    }
+  };
+
+  const handleBack = () => {
+    if (isTouched) {
+      setDialogOpen(true);
+    } else {
+      navigate('/transactions');
     }
   };
 
@@ -168,7 +188,7 @@ export default function AddTransactionPage() {
       </div>
 
       <div className="flex justify-between items-center mt-8">
-        <Button onClick={() => navigate('/transactions')} color="inherit">
+        <Button onClick={handleBack} color="inherit">
           Назад
         </Button>
         <Button variant="contained" onClick={handleSubmit}>
@@ -184,6 +204,38 @@ export default function AddTransactionPage() {
           setSelectedCategory(newCategory);
         }}
       />
+
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: '#2d2d2d',
+            color: '#fff',
+            borderRadius: 3,
+            p: 2
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
+          Незбережені зміни
+        </DialogTitle>
+        <DialogContent>
+          <p>У вас є незбережені зміни. Вийти без збереження?</p>
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'flex-end' }}>
+          <Button onClick={() => setDialogOpen(false)} sx={{ color: '#fff' }}>
+            Скасувати
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => navigate('/transactions')}
+          >
+            Вийти
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }
