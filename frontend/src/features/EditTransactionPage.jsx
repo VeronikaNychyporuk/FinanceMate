@@ -228,13 +228,9 @@ export default function EditTransactionPage() {
 
       <div className="flex justify-between items-center mt-8">
         <Button onClick={handleBack} color="inherit">Назад</Button>
-        <Button
-          variant="contained"
-          onClick={handleSubmit}
-          disabled={!hasChanges()}
-        >
-          Зберегти
-        </Button>
+        <button onClick={handleSubmit} disabled={!hasChanges()}
+            className="bg-gray-800 hover:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded"
+        >Зберегти</button>
       </div>
 
       <Dialog

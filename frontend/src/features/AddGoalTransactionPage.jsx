@@ -1,63 +1,53 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
+  TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { DatePicker } from '@tremor/react';
-import dayjs from 'dayjs';
 import axios from 'axios';
-import AddCategoryModal from '../components/AddCategoryModal';
+import dayjs from 'dayjs';
 
-export default function AddTransactionPage() {
+export default function AddGoalTransactionPage() {
+  const { id: goalId } = useParams();
+  const navigate = useNavigate();
+
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('UAH');
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const [currency, setCurrency] = useState('');
+  const [type, setType] = useState('deposit');
   const [date, setDate] = useState(dayjs().toDate());
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
-  const [openCategoryModal, setOpenCategoryModal] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isTouched, setIsTouched] = useState(false);
 
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-
-    axios.get('http://localhost:5000/api/user/profile', {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(res => {
-      setCurrency(res.data.currency || 'UAH');
-    });
-
-    axios.get('http://localhost:5000/api/categories', {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(res => {
-      setCategories(res.data);
-    });
-  }, []);
-
   useEffect(() => {
     const hasChanges =
-      amount !== '' ||
-      currency !== 'UAH' ||
+      amount.trim() !== '' ||
       note.trim() !== '' ||
-      selectedCategory !== null ||
+      currency !== 'UAH' ||
+      type !== 'deposit' ||
       !dayjs(date).isSame(dayjs(), 'day');
 
     setIsTouched(hasChanges);
-  }, [amount, currency, selectedCategory, note, date]);
+  }, [amount, currency, type, date, note]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    axios.get('http://localhost:5000/api/user/profile', {
+        headers: { Authorization: `Bearer ${token}` }
+    }).then((res) => {
+        setCurrency(res.data.currency || 'UAH');
+    });
+  }, []);
 
   const validate = () => {
     const newErrors = {};
-    if (!amount || isNaN(amount) || Number(amount) <= 0) {
-      newErrors.amount = 'Введіть коректну суму';
+    if (!amount || isNaN(amount) || Number(amount) < 0.01) {
+      newErrors.amount = 'Введіть коректну суму (не менше 0.01)';
     }
     if (!currency) newErrors.currency = 'Оберіть валюту';
-    if (!selectedCategory) newErrors.category = 'Оберіть категорію';
-    if (!date) newErrors.date = 'Оберіть дату';
+    if (!type) newErrors.type = 'Оберіть тип операції';
     return newErrors;
   };
 
@@ -65,6 +55,7 @@ export default function AddTransactionPage() {
     const token = localStorage.getItem('accessToken');
     setErrors({});
     setSubmitError('');
+
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
@@ -74,20 +65,19 @@ export default function AddTransactionPage() {
     const data = {
       amount: Number(amount),
       currency,
-      type: selectedCategory.type,
-      categoryId: selectedCategory._id,
+      type,
       date: dayjs(date).format('YYYY-MM-DD'),
+      note: note.trim(),
     };
-    if (note.trim()) data.note = note.trim();
 
     try {
-      await axios.post('http://localhost:5000/api/transactions', data, {
+      await axios.post(`http://localhost:5000/api/goals/${goalId}/transactions`, data, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      navigate('/transactions');
+      navigate(`/goals/${goalId}`);
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити транзакцію';
       setSubmitError(msg);
@@ -98,13 +88,13 @@ export default function AddTransactionPage() {
     if (isTouched) {
       setDialogOpen(true);
     } else {
-      navigate('/transactions');
+      navigate(`/goals/${goalId}`);
     }
   };
 
   return (
     <div className="max-w-xl mx-auto mt-10 bg-white shadow-lg rounded-2xl p-10">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Нова транзакція</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">Нова транзакція цілі</h1>
 
       {submitError && <p className="text-red-600 mb-4">{submitError}</p>}
 
@@ -132,37 +122,18 @@ export default function AddTransactionPage() {
           <MenuItem value="EUR">Євро (EUR)</MenuItem>
         </TextField>
 
-        <Autocomplete
-          options={categories}
-          getOptionLabel={(option) =>
-            `${option.name} (${option.type === 'income' ? 'дохід' : 'витрата'})`
-          }
-          filterOptions={(options, state) =>
-            options.filter((option) =>
-              option.name.toLowerCase().includes(state.inputValue.toLowerCase())
-            )
-          }
-          value={selectedCategory}
-          onChange={(e, newValue) => setSelectedCategory(newValue)}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Категорія"
-              fullWidth
-              error={!!errors.category}
-              helperText={errors.category}
-            />
-          )}
-          isOptionEqualToValue={(option, value) => option._id === value._id}
-        />
-        <div className="text-right -mt-3">
-          <button
-            onClick={() => setOpenCategoryModal(true)}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            + Додати категорію
-          </button>
-        </div>
+        <TextField
+          select
+          label="Тип операції"
+          fullWidth
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          error={!!errors.type}
+          helperText={errors.type}
+        >
+          <MenuItem value="deposit">Поповнення</MenuItem>
+          <MenuItem value="withdrawal">Зняття</MenuItem>
+        </TextField>
 
         <div>
           <label className="block text-sm text-gray-700 mb-1">Дата</label>
@@ -172,9 +143,6 @@ export default function AddTransactionPage() {
             maxDate={dayjs().toDate()}
             className="w-full bg-white border border-gray-300 rounded-md shadow-sm"
           />
-          {errors.date && (
-            <p className="text-sm text-red-500 mt-1">{errors.date}</p>
-          )}
         </div>
 
         <TextField
@@ -192,20 +160,14 @@ export default function AddTransactionPage() {
           Назад
         </Button>
         <button
-            onClick={handleSubmit}
-            className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded"
-        >Створити</button>
+          onClick={handleSubmit}
+          className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded"
+        >
+          Створити
+        </button>
       </div>
 
-      <AddCategoryModal
-        open={openCategoryModal}
-        onClose={() => setOpenCategoryModal(false)}
-        onSuccess={(newCategory) => {
-          setCategories((prev) => [...prev, newCategory]);
-          setSelectedCategory(newCategory);
-        }}
-      />
-
+      {/* Діалог підтвердження */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -231,7 +193,7 @@ export default function AddTransactionPage() {
           <Button
             variant="contained"
             color="error"
-            onClick={() => navigate('/transactions')}
+            onClick={() => navigate(`/goals/${goalId}`)}
           >
             Вийти
           </Button>

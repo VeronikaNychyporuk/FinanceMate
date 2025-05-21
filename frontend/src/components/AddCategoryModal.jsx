@@ -99,13 +99,10 @@ export default function AddCategoryModal({ open, onClose, onSuccess }) {
         <Button onClick={handleClose} color="inherit">
           Скасувати
         </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={isLoading}
-        >
-          Створити
-        </Button>
+        <button
+            onClick={handleSubmit} disabled={isLoading}
+            className="bg-gray-800 hover:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded"
+        >Створити</button>
       </DialogActions>
     </Dialog>
   );
