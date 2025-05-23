@@ -27,8 +27,6 @@ import EditBudgetPage from '../features/EditBudgetPage';
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
 
-import Test from '../features/Test';
-
 function AppRouter() {  
   return (
     <Routes>
@@ -55,8 +53,6 @@ function AppRouter() {
       <Route path="/budgets/:id" element={<PrivateRoute><Layout><BudgetDetailsPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/new" element={<PrivateRoute><Layout><AddBudgetPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/edit/:id" element={<PrivateRoute><Layout><EditBudgetPage /></Layout></PrivateRoute>}/>
-
-      <Route path="/test" element={<Layout><Test /></Layout>} />
     </Routes>
   );
 }
