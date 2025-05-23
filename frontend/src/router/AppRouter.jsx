@@ -18,6 +18,11 @@ import AddGoalPage from '../features/AddGoalPage';
 import GoalDetailsPage from '../features/GoalDetailsPage';
 import EditGoalPage from '../features/EditGoalPage';
 import AddGoalTransactionPage from '../features/AddGoalTransactionPage';
+import BudgetsPage from '../features/BudgetsPage';
+import BudgetsArchivePage from '../features/BudgetsArchivePage';
+import BudgetDetailsPage from '../features/BudgetDetailsPage';
+import AddBudgetPage from '../features/AddBudgetPage';
+import EditBudgetPage from '../features/EditBudgetPage';
 
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
@@ -45,6 +50,11 @@ function AppRouter() {
       <Route path="/goals/:id" element={<PrivateRoute><Layout><GoalDetailsPage /></Layout></PrivateRoute>}/>
       <Route path="/goals/edit/:id" element={<PrivateRoute><Layout><EditGoalPage /></Layout></PrivateRoute>}/>
       <Route path="/goals/:id/transactions/new" element={<PrivateRoute><Layout><AddGoalTransactionPage /></Layout></PrivateRoute>}/>
+      <Route path="/budgets" element={<PrivateRoute><Layout><BudgetsPage /></Layout></PrivateRoute>}/>
+      <Route path="/budgets/archive" element={<PrivateRoute><Layout><BudgetsArchivePage /></Layout></PrivateRoute>}/>
+      <Route path="/budgets/:id" element={<PrivateRoute><Layout><BudgetDetailsPage /></Layout></PrivateRoute>}/>
+      <Route path="/budgets/new" element={<PrivateRoute><Layout><AddBudgetPage /></Layout></PrivateRoute>}/>
+      <Route path="/budgets/edit/:id" element={<PrivateRoute><Layout><EditBudgetPage /></Layout></PrivateRoute>}/>
 
       <Route path="/test" element={<Layout><Test /></Layout>} />
     </Routes>

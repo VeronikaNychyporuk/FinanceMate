@@ -111,7 +111,7 @@ export default function TransactionsPage() {
       {/* Кнопка додавання транзакції */}
       <div className="flex justify-end mb-6">
         <button
-          onClick={() => navigate('/transactions/new')}
+          onClick={() => navigate('/transactions/new', {state: { from: 'transactions' }})}
           className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded"
         >
           + Додати транзакцію
@@ -155,7 +155,7 @@ export default function TransactionsPage() {
         open={!!selectedTransaction}
         transaction={selectedTransaction}
         onClose={() => setSelectedTransaction(null)}
-        onEdit={() => navigate(`/transactions/edit/${selectedTransaction._id}`)}
+        onEdit={() => navigate(`/transactions/edit/${selectedTransaction._id}`, {state: { from: '/transactions' }})}
         onConfirmDelete={() => {
             const token = localStorage.getItem('accessToken');
             axios.delete(`http://localhost:5000/api/transactions/${selectedTransaction._id}`, {

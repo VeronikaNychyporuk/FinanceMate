@@ -51,16 +51,16 @@ export default function GoalsPage() {
                 goal.status === 'in_progress' && dayjs(goal.deadline).isBefore(dayjs());
               const isAchieved = goal.status === 'achieved';
               const colorClass = isLate
-                ? 'text-red-600'
+                ? 'red'
                 : isAchieved
-                ? 'text-green-600'
-                : 'text-gray-700';
+                ? 'green'
+                : 'blue';
 
               return (
-                <div key={goal._id} className="border-b pb-4">
+                <div key={goal._id} className="border border-gray-200 rounded-2xl p-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <div className={`text-xl font-semibold ${colorClass}`}>{goal.name}</div>
-                    <div className={`text-sm ${colorClass}`}>
+                    <div className={`text-xl font-semibold text-gray-700`}>{goal.name}</div>
+                    <div className={`text-sm text-gray-700`}>
                       {dayjs(goal.deadline).format('DD.MM.YYYY')}
                     </div>
                   </div>
@@ -71,13 +71,7 @@ export default function GoalsPage() {
 
                   <CustomProgressBar
                     value={goal.progress}
-                    color={
-                        goal.status === 'achieved'
-                            ? 'green'
-                            : goal.status === 'in_progress' && dayjs(goal.deadline).isBefore(dayjs())
-                                ? 'red'
-                                : 'blue'
-                    }
+                    color={`${colorClass}`}
                   />
                   
                   <div className="flex justify-between items-center text-base text-gray-600 mt-1">

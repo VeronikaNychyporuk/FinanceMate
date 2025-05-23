@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, useBeforeUnload } from 'react-router-dom';
+import { useNavigate, useParams, useBeforeUnload, useLocation } from 'react-router-dom';
 import {
   TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -10,6 +10,8 @@ import axios from 'axios';
 export default function EditTransactionPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || 'transactions';
 
   const [initialData, setInitialData] = useState(null);
   const [amount, setAmount] = useState('');
@@ -133,7 +135,9 @@ export default function EditTransactionPage() {
             'Content-Type': 'application/json'
         }
         });
-        navigate('/transactions');
+        navigate( from.startsWith('/budgets') || from === 'budgets'
+          ? from
+          : '/transactions');
     } catch (err) {
         const msg = err.response?.data?.message || 'Не вдалося оновити транзакцію';
         setSubmitError(msg);
@@ -145,7 +149,9 @@ export default function EditTransactionPage() {
     if (hasChanges()) {
       setDialogOpen(true);
     } else {
-      navigate('/transactions');
+      navigate( from.startsWith('/budgets') || from === 'budgets'
+          ? from
+          : '/transactions');
     }
   };
 
@@ -258,7 +264,9 @@ export default function EditTransactionPage() {
           <Button
             variant="contained"
             color="error"
-            onClick={() => navigate('/transactions')}
+            onClick={() => navigate( from.startsWith('/budgets') || from === 'budgets'
+              ? from
+              : '/transactions')}
           >
             Вийти
           </Button>

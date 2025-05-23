@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -22,6 +22,8 @@ export default function AddTransactionPage() {
   const [isTouched, setIsTouched] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || 'transactions';
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -87,7 +89,7 @@ export default function AddTransactionPage() {
           'Content-Type': 'application/json'
         }
       });
-      navigate('/transactions');
+      navigate(from === 'budget' ? '/budgets' : '/transactions');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити транзакцію';
       setSubmitError(msg);
@@ -98,7 +100,7 @@ export default function AddTransactionPage() {
     if (isTouched) {
       setDialogOpen(true);
     } else {
-      navigate('/transactions');
+      navigate(from === 'budget' ? '/budgets' : '/transactions');
     }
   };
 
@@ -231,7 +233,7 @@ export default function AddTransactionPage() {
           <Button
             variant="contained"
             color="error"
-            onClick={() => navigate('/transactions')}
+            onClick={() => navigate(from === 'budget' ? '/budgets' : '/transactions')}
           >
             Вийти
           </Button>

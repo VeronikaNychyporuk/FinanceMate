@@ -4,7 +4,7 @@ const Category = require("../models/Category");
 
 exports.fetchAllBudgets = async (userId) => {
   const budgets = await Budget.find({ userId })
-    .populate("categoryLimits.categoryId", "name type icon") // опціонально
+    .populate("categoryLimits.categoryId", "name type icon")
     .sort({ "period.year": -1, "period.month": -1 });
 
   return budgets;
@@ -119,12 +119,17 @@ exports.generateBudgetOverview = async (userId, month, year) => {
     date: { $gte: startDate, $lt: endDate },
   });
 
-  // ✅ Групуємо по категоріях за amountInBaseCurrency
-  const expensesByCategory = transactions.reduce((acc, tx) => {
-    const catId = tx.categoryId.toString();
-    acc[catId] = (acc[catId] || 0) + tx.amountInBaseCurrency;
-    return acc;
-  }, {});
+  // ✅ Рахуємо загальні витрати по всіх транзакціях
+  const totalSpent = transactions.reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
+
+  // ✅ Групуємо тільки ті транзакції, які мають категорії
+  const expensesByCategory = {};
+  for (const tx of transactions) {
+    const catId = tx.categoryId?.toString();
+    if (catId) {
+      expensesByCategory[catId] = (expensesByCategory[catId] || 0) + tx.amountInBaseCurrency;
+    }
+  }
 
   const categories = budget.categoryLimits.map((limit) => {
     const cat = limit.categoryId;
@@ -142,7 +147,6 @@ exports.generateBudgetOverview = async (userId, month, year) => {
     };
   });
 
-  const totalSpent = categories.reduce((sum, c) => sum + c.spent, 0);
   const totalLimit = budget.totalLimit;
   const totalPercentage = Math.min((totalSpent / totalLimit) * 100, 100).toFixed(2);
 
