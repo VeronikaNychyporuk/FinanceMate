@@ -78,8 +78,8 @@ export default function EditBudgetPage() {
 
     const limitsChanged = categoryLimits.length !== initial.categoryLimits.length ||
       categoryLimits.some((cl, i) =>
-        cl.categoryId !== (initial.categoryLimits[i].categoryId._id || initial.categoryLimits[i].categoryId) ||
-        Number(cl.limit) !== initial.categoryLimits[i].limit
+        cl.categoryId !== (initial.categoryLimits[i]?.categoryId._id || initial.categoryLimits[i]?.categoryId) ||
+        Number(cl.limit) !== initial.categoryLimits[i]?.limit
       );
 
     return totalLimitChanged || monthChanged || yearChanged || limitsChanged;
@@ -110,6 +110,12 @@ export default function EditBudgetPage() {
   const handleCategoryChange = (index, field, value) => {
     const updated = [...categoryLimits];
     updated[index][field] = value;
+    setCategoryLimits(updated);
+  };
+
+  const handleRemoveCategory = (index) => {
+    const updated = [...categoryLimits];
+    updated.splice(index, 1);
     setCategoryLimits(updated);
   };
 
@@ -237,7 +243,7 @@ export default function EditBudgetPage() {
             );
 
             return (
-              <div key={index} className="flex gap-3 items-center">
+              <div key={index} className="flex gap-3 items-start">
                 <TextField
                   select
                   label="Категорія"
@@ -245,7 +251,7 @@ export default function EditBudgetPage() {
                   onChange={(e) =>
                     handleCategoryChange(index, 'categoryId', e.target.value)
                   }
-                  className="w-2/3"
+                  className="w-2/5"
                   error={!!errors[`category-${index}`]}
                   helperText={errors[`category-${index}`]}
                 >
@@ -263,10 +269,18 @@ export default function EditBudgetPage() {
                   onChange={(e) =>
                     handleCategoryChange(index, 'limit', e.target.value)
                   }
-                  className="w-1/3"
+                  className="w-2/5"
                   error={!!errors[`limit-${index}`]}
                   helperText={errors[`limit-${index}`]}
                 />
+
+                <button
+                  onClick={() => handleRemoveCategory(index)}
+                  className="text-red-600 hover:underline text-sm mt-3"
+                  type="button"
+                >
+                  Видалити
+                </button>
               </div>
             );
           })}
