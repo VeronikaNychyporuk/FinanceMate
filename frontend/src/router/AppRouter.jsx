@@ -23,6 +23,7 @@ import BudgetsArchivePage from '../features/BudgetsArchivePage';
 import BudgetDetailsPage from '../features/BudgetDetailsPage';
 import AddBudgetPage from '../features/AddBudgetPage';
 import EditBudgetPage from '../features/EditBudgetPage';
+import NotFoundPage from '../features/NotFoundPage';
 
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
@@ -53,6 +54,7 @@ function AppRouter() {
       <Route path="/budgets/:id" element={<PrivateRoute><Layout><BudgetDetailsPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/new" element={<PrivateRoute><Layout><AddBudgetPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/edit/:id" element={<PrivateRoute><Layout><EditBudgetPage /></Layout></PrivateRoute>}/>
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
