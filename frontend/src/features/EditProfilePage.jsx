@@ -145,6 +145,15 @@ export default function EditProfilePage() {
           onChange={(e) => setName(e.target.value)}
           className="w-full p-3 rounded bg-gray-100 border focus:outline-none"
         />
+        <label>Виберіть базову валюту</label>
+        <select
+          value={currency}
+          className="w-full p-3 rounded bg-gray-100 border focus:outline-none"
+        >
+          <option value="UAH">Гривня (UAH)</option>
+          <option value="USD">Долар (USD)</option>
+          <option value="EUR">Євро (EUR)</option>
+        </select>
       </div>
 
       {/* Пароль */}

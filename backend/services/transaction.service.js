@@ -84,7 +84,7 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
   if (updates.categoryId !== undefined) {
     transaction.categoryId = updates.categoryId;
 
-    // 🔁 Якщо змінилася категорія — перевірити її тип
+    // Якщо змінилася категорія — перевірити її тип
     const newCategory = await Category.findById(updates.categoryId);
     if (!newCategory) throw new Error("Нову категорію не знайдено.");
 
@@ -95,7 +95,7 @@ exports.updateUserTransaction = async (userId, transactionId, updates) => {
   if (updates.date !== undefined) transaction.date = new Date(updates.date);
   if (updates.note !== undefined) transaction.note = updates.note;
 
-  // 🔁 Перерахунок валюти
+  // Перерахунок валюти
   const user = await User.findById(userId);
   if (!user) throw new Error("Користувача не знайдено.");
 

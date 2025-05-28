@@ -119,10 +119,10 @@ exports.generateBudgetOverview = async (userId, month, year) => {
     date: { $gte: startDate, $lt: endDate },
   });
 
-  // ✅ Рахуємо загальні витрати по всіх транзакціях
+  // Рахуємо загальні витрати по всіх транзакціях
   const totalSpent = transactions.reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
 
-  // ✅ Групуємо тільки ті транзакції, які мають категорії
+  // Групуємо тільки ті транзакції, які мають категорії
   const expensesByCategory = {};
   for (const tx of transactions) {
     const catId = tx.categoryId?.toString();
