@@ -1,7 +1,6 @@
 const cron = require("node-cron");
-const RecurringTransaction = require("../../models/RecurringTransaction");
-const Transaction = require("../../models/Transaction");
-const { createUserTransaction } = require("../../services/transactionService");
+const RecurringTransaction = require("../models/RecurringTransaction");
+const { createUserTransaction } = require("../services/transactionService");
 const dayjs = require("dayjs"); // для зручної роботи з датами
 
 // планувальник — запуск щоденно о 02:00 ночі
