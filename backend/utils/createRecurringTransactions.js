@@ -1,5 +1,8 @@
 const cron = require("node-cron");
 const RecurringTransaction = require("../models/RecurringTransaction");
+const Notification = require("../models/Notification");
+const Category = require("../models/Category");
+const mongoose = require("mongoose");
 const { createUserTransaction } = require("../services/transaction.service");
 const dayjs = require("dayjs"); // для зручної роботи з датами
 
@@ -25,6 +28,17 @@ cron.schedule("0 2 * * *", async () => {
         categoryId: recurring.categoryId,
         note: recurring.note,
         date: recurring.nextRun,
+      });
+
+      //Стоврення сповіщення про створення транзакції
+      const category = await Category.findById(recurring.categoryId).select("name");
+      const categoryName = category?.name || "Невідома категорія";
+      const userId = recurring.userId.toString();
+      await Notification.create({
+        userId,
+        type: "system",
+        message: `Додано регулярну транзакцію на суму ${recurring.amount}${recurring.currency} у категорії "${categoryName}".`,
+        status: "unread",
       });
 
       // Обчислюємо наступну дату
