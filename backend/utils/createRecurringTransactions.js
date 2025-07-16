@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const RecurringTransaction = require("../models/RecurringTransaction");
-const { createUserTransaction } = require("../services/transactionService");
+const { createUserTransaction } = require("../services/transaction.service");
 const dayjs = require("dayjs"); // для зручної роботи з датами
 
 // планувальник — запуск щоденно о 02:00 ночі
@@ -8,11 +8,12 @@ cron.schedule("0 2 * * *", async () => {
   console.log("⏰ Перевірка регулярних платежів...");
 
   try {
-    const today = dayjs().startOf("day").toDate();
+    const startOfToday = dayjs().startOf("day").toDate();
+    const endOfToday = dayjs().endOf("day").toDate();
 
     const recurringTransactions = await RecurringTransaction.find({
       isActive: true,
-      nextRun: { $lte: today },
+      nextRun: { $gte: startOfToday, $lte: endOfToday },
     });
 
     for (const recurring of recurringTransactions) {

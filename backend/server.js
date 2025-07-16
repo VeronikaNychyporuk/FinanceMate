@@ -9,7 +9,7 @@ mongoose.connect(MONGO_URI)
   .then(() => {
     console.log('Connected to MongoDB');
 
-    require('./utils/cron/createRecurringTransactions');
+    require('./utils/createRecurringTransactions');
 
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
