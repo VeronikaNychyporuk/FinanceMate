@@ -65,9 +65,42 @@ export default function TransactionDetailsModal({
           </div>
 
           <div className="text-gray-700">
-            <span className="font-medium">Дата:</span>{' '}
-            {dayjs(date).format('DD.MM.YYYY')}
+            <span className="font-medium">Дата створення:</span>{' '}
+            {dayjs(transaction.createdAt || date).format('DD.MM.YYYY')}
           </div>
+
+          {transaction.nextRun && (
+            <div className="text-gray-700">
+              <span className="font-medium">Наступне виконання:</span>{' '}
+              {dayjs(transaction.nextRun).format('DD.MM.YYYY')}
+            </div>
+          )}
+
+          {transaction.endDate && (
+            <div className="text-gray-700">
+              <span className="font-medium">Дата завершення:</span>{' '}
+              {dayjs(transaction.endDate).format('DD.MM.YYYY')}
+            </div>
+          )}
+
+          {transaction.frequency && (
+            <div className="text-gray-700">
+              <span className="font-medium">Частота:</span>{' '}
+              {{
+                daily: 'Щодня',
+                weekly: 'Щотижня',
+                monthly: 'Щомісяця',
+                yearly: 'Щороку'
+              }[transaction.frequency] || transaction.frequency}
+            </div>
+          )}
+
+          {'isActive' in transaction && (
+            <div className="text-gray-700">
+              <span className="font-medium">Статус:</span>{' '}
+              {transaction.isActive ? 'Активна' : 'Неактивна'}
+            </div>
+          )}
 
           {note && (
             <div className="text-gray-700">
@@ -76,6 +109,7 @@ export default function TransactionDetailsModal({
             </div>
           )}
         </DialogContent>
+
 
         <DialogActions className="bg-white px-6 pb-4">
           <button

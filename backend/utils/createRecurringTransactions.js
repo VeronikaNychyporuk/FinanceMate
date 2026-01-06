@@ -6,8 +6,8 @@ const mongoose = require("mongoose");
 const { createUserTransaction } = require("../services/transaction.service");
 const dayjs = require("dayjs"); // для зручної роботи з датами
 
-// планувальник — запуск щоденно о 02:00 ночі
-cron.schedule("0 2 * * *", async () => {
+// планувальник — запуск щоденно о 23:00 ночі
+cron.schedule("46 23 * * *", async () => {
   console.log("⏰ Перевірка регулярних платежів...");
 
   try {

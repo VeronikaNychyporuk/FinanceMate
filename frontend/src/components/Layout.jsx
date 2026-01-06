@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon, Notifications, AccountCircle,
-  Dashboard, AccountBalanceWallet, ListAlt, Flag
+  Dashboard, AccountBalanceWallet, ListAlt, Flag, EventRepeat
 } from '@mui/icons-material';
 import {
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button
@@ -56,6 +56,7 @@ export default function Layout({ children }) {
     { label: 'Аналітика', icon: <Dashboard />, path: '/dashboard' },
     { label: 'Бюджет', icon: <AccountBalanceWallet />, path: '/budgets' },
     { label: 'Транзакції', icon: <ListAlt />, path: '/transactions' },
+    { label: 'Регулярні транзакції', icon: <EventRepeat />, path: '/recurring-transactions' },
     { label: 'Цілі', icon: <Flag />, path: '/goals' }
   ];
 

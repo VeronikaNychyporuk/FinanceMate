@@ -23,6 +23,9 @@ import BudgetsArchivePage from '../features/BudgetsArchivePage';
 import BudgetDetailsPage from '../features/BudgetDetailsPage';
 import AddBudgetPage from '../features/AddBudgetPage';
 import EditBudgetPage from '../features/EditBudgetPage';
+import RecurringTransactionsPage from '../features/RecurringTransactionsPage';
+import EditRecurringTransactionPage from '../features/EditRecurringTransactionPage';
+import AddRecurringTransactionPage from '../features/AddRecurringTransactionPage';
 import NotFoundPage from '../features/NotFoundPage';
 
 import Layout from '../components/Layout';
@@ -54,6 +57,9 @@ function AppRouter() {
       <Route path="/budgets/:id" element={<PrivateRoute><Layout><BudgetDetailsPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/new" element={<PrivateRoute><Layout><AddBudgetPage /></Layout></PrivateRoute>}/>
       <Route path="/budgets/edit/:id" element={<PrivateRoute><Layout><EditBudgetPage /></Layout></PrivateRoute>}/>
+      <Route path="/recurring-transactions" element={<PrivateRoute><Layout><RecurringTransactionsPage /></Layout></PrivateRoute>}/>
+      <Route path="/recurring-transactions/edit/:id" element={<PrivateRoute><Layout><EditRecurringTransactionPage /></Layout></PrivateRoute>}/>
+      <Route path="/recurring-transactions/new" element={<PrivateRoute><Layout><AddRecurringTransactionPage /></Layout></PrivateRoute>}/>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
