@@ -2,16 +2,27 @@ import React, { useMemo, useState } from "react";
 
 /**
  * RecommendationsMockPage.jsx
- * Візуальний макет "Центру рекомендацій" з фейковими даними.
- * Без залежностей (графік на SVG).
+ * Оновлений макет:
+ * - Перша підсторінка: "Рекомендації" (як inbox)
+ * - "Огляд" з перемикачем 7/30/90 днів
+ * - Інші підсторінки: докази/візуалізація (аномалії/прогноз/цілі/патерни)
+ *
+ * Без залежностей: графіки — простий SVG.
  */
 
 const TABS = [
+  { key: "recs", label: "Рекомендації" },
   { key: "overview", label: "Огляд" },
   { key: "anomalies", label: "Аномалії" },
   { key: "forecast", label: "Прогноз" },
   { key: "goals", label: "Цілі (Monte-Carlo)" },
   { key: "patterns", label: "Поведінка витрат" },
+];
+
+const OVERVIEW_PERIODS = [
+  { key: "7d", label: "7 днів" },
+  { key: "30d", label: "30 днів" },
+  { key: "90d", label: "90 днів" },
 ];
 
 function cn(...cls) {
@@ -38,14 +49,23 @@ function SeverityPill({ severity }) {
   };
   const s = map[severity] ?? map.low;
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-1 text-xs border rounded-full",
-        s.cls
-      )}
-      title={`Серйозність: ${s.label}`}
-    >
+    <span className={cn("inline-flex items-center px-2 py-1 text-xs border rounded-full", s.cls)}>
       {s.label}
+    </span>
+  );
+}
+
+function ModulePill({ moduleKey }) {
+  const map = {
+    anomalies: "Аномалії",
+    forecast: "Прогноз",
+    goals: "Цілі",
+    patterns: "Поведінка",
+    overview: "Огляд",
+  };
+  return (
+    <span className="inline-flex items-center px-2 py-1 text-xs border rounded-full bg-slate-50 text-slate-700">
+      {map[moduleKey] ?? moduleKey}
     </span>
   );
 }
@@ -69,7 +89,6 @@ function Gauge({ value, labelLeft = "0%", labelRight = "100%" }) {
 }
 
 function MiniSparkline({ points, width = 520, height = 140 }) {
-  // points: [{xLabel, y}]
   const padding = 12;
   const w = width;
   const h = height;
@@ -90,19 +109,15 @@ function MiniSparkline({ points, width = 520, height = 140 }) {
   return (
     <div className="w-full overflow-x-auto">
       <svg width={w} height={h} className="block">
-        {/* background grid */}
         <rect x="0" y="0" width={w} height={h} fill="white" />
         {[0, 1, 2, 3, 4].map((i) => {
           const y = padding + (i * (h - padding * 2)) / 4;
           return <line key={i} x1={padding} y1={y} x2={w - padding} y2={y} stroke="#e2e8f0" />;
         })}
-        {/* line */}
         <path d={d} fill="none" stroke="#0f172a" strokeWidth="2.5" />
-        {/* points */}
         {points.map((p, i) => (
           <circle key={i} cx={toX(i)} cy={toY(p.y)} r="3.5" fill="#0f172a" />
         ))}
-        {/* axes labels (min/max) */}
         <text x={padding} y={padding - 2} fontSize="11" fill="#64748b">
           max {maxY.toFixed(0)}
         </text>
@@ -158,43 +173,143 @@ function GhostButton({ children, onClick }) {
   );
 }
 
+function Segmented({ options, value, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={cn(
+            "px-3 py-1.5 text-sm rounded-md",
+            value === o.key ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function RecommendationsMockPage() {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("recs");
+  const [overviewPeriod, setOverviewPeriod] = useState("30d");
 
   const fake = useMemo(() => {
-    // Псевдо "snapshot" який UI отримує одним запитом
+    // Один "snapshot", який UI отримує одним запитом.
+    // Overview залежить від overviewPeriod (7/30/90), інші секції — незалежні.
+    // Це відповідає вашому рішенню: рекомендації загальні, а період — лише для огляду.
     return {
       generatedAt: "2026-01-08 22:40",
-      periodLabel: "Останні 30 днів",
-      overview: {
-        net: 12400,
-        income: 48600,
-        expense: 36200,
-        topDrivers: [
-          { name: "Їжа та доставка", amount: 9800 },
-          { name: "Транспорт", amount: 5200 },
-          { name: "Підписки", amount: 1600 },
+      recommendations: {
+        groups: [
+          {
+            title: "Негайні дії",
+            items: [
+              {
+                id: "r1",
+                module: "anomalies",
+                severity: "high",
+                title: "Перевірте підозрілу транзакцію",
+                message: "Покупка на 2 450 UAH у невідомого мерчанта. Рекомендуємо підтвердити, що це ваша операція.",
+                facts: ["Новий мерчант", "Сума в 4.1× більша за типову", "Рідкісна категорія"],
+                primaryCta: { label: "Перевірити", goto: "anomalies" },
+                secondaryCta: { label: "Докази", goto: "anomalies" },
+              },
+              {
+                id: "r2",
+                module: "goals",
+                severity: "medium",
+                title: "Підвищіть шанс досягнення фінансової цілі",
+                message: "Ймовірність досягнення “Подушки безпеки” до 01.09.2026 зараз 42%. Є прості сценарії для покращення.",
+                facts: ["Поточний шанс: 42%", "+500 UAH/міс → 68%", "Дедлайн: 01.09.2026"],
+                primaryCta: { label: "Подивитись сценарії", goto: "goals" },
+                secondaryCta: { label: "Докази", goto: "goals" },
+              },
+            ],
+          },
+          {
+            title: "Оптимізація витрат",
+            items: [
+              {
+                id: "r3",
+                module: "patterns",
+                severity: "medium",
+                title: "Регулярні дрібні витрати формують значну частку бюджету",
+                message:
+                  "Виявлено кластер дрібних повторюваних витрат (кава/снеки/доставка). Невеликі ліміти дадуть відчутний ефект.",
+                facts: ["74 транзакції", "Сума: 11 200 UAH", "Медіана: 140 UAH"],
+                primaryCta: { label: "Переглянути кластери", goto: "patterns" },
+                secondaryCta: { label: "Докази", goto: "patterns" },
+              },
+            ],
+          },
+          {
+            title: "Планування наперед",
+            items: [
+              {
+                id: "r4",
+                module: "forecast",
+                severity: "low",
+                title: "Прогноз показує зменшення фінансової “подушки”",
+                message:
+                  "За поточним трендом баланс лишається позитивним, але очікується поступове зниження. Перевірте прогноз і ризики.",
+                facts: ["Горизонт: 60 днів", "Баланс: 8 200 → 2 500", "Є ризик росту витрат на їжу"],
+                primaryCta: { label: "Відкрити прогноз", goto: "forecast" },
+                secondaryCta: { label: "Докази", goto: "forecast" },
+              },
+            ],
+          },
         ],
-        priorityActions: [
-          {
-            title: "Перевірте підозрілу транзакцію",
-            text: "Нова покупка на 2 450 UAH у невідомого мерчанта.",
-            severity: "high",
-            cta: { label: "Відкрити аномалії", goto: "anomalies" },
-          },
-          {
-            title: "Є ризик перевищення бюджету на їжу",
-            text: "Витрати на їжу вже 92% від місячного ліміту.",
-            severity: "medium",
-            cta: { label: "Подивитись прогноз", goto: "forecast" },
-          },
-          {
-            title: "Щоб встигнути до цілі — збільште заощадження",
-            text: "Ймовірність досягнення цілі зараз 42%. +500 UAH/міс → 68%.",
-            severity: "medium",
-            cta: { label: "Перейти до цілі", goto: "goals" },
-          },
-        ],
+      },
+      overviewByPeriod: {
+        "7d": {
+          label: "Останні 7 днів",
+          net: 2200,
+          income: 11200,
+          expense: 9000,
+          topDrivers: [
+            { name: "Їжа та доставка", amount: 2100 },
+            { name: "Транспорт", amount: 1200 },
+            { name: "Підписки", amount: 400 },
+          ],
+          highlights: [
+            { severity: "medium", text: "Витрати на доставку зросли порівняно з попередніми 7 днями." },
+            { severity: "low", text: "Нетто позитивне, але темп витрат високий." },
+          ],
+        },
+        "30d": {
+          label: "Останні 30 днів",
+          net: 12400,
+          income: 48600,
+          expense: 36200,
+          topDrivers: [
+            { name: "Їжа та доставка", amount: 9800 },
+            { name: "Транспорт", amount: 5200 },
+            { name: "Підписки", amount: 1600 },
+          ],
+          highlights: [
+            { severity: "medium", text: "Категорія “Їжа та доставка” близька до ліміту бюджету." },
+            { severity: "low", text: "Стабільний дохід, але великі покупки впливають на баланс." },
+          ],
+        },
+        "90d": {
+          label: "Останні 90 днів",
+          net: 28300,
+          income: 141000,
+          expense: 112700,
+          topDrivers: [
+            { name: "Їжа та доставка", amount: 29800 },
+            { name: "Оренда/житло", amount: 27000 },
+            { name: "Транспорт", amount: 14600 },
+          ],
+          highlights: [
+            { severity: "medium", text: "Тренд витрат на їжу зростає вже 3 місяці." },
+            { severity: "low", text: "Середній баланс позитивний, але волатильність витрат підвищена." },
+          ],
+        },
       },
       anomalies: {
         items: [
@@ -233,7 +348,7 @@ export default function RecommendationsMockPage() {
         ],
         risks: [
           { severity: "medium", text: "Ймовірне зростання витрат у категорії “Їжа та доставка” наступні 2 тижні." },
-          { severity: "low", text: "Баланс очікувано залишиться позитивним, але “подушка” зменшується." },
+          { severity: "low", text: "Баланс очікувано позитивний, але “подушка” зменшується." },
         ],
       },
       goals: {
@@ -291,33 +406,27 @@ export default function RecommendationsMockPage() {
     };
   }, []);
 
-  const header = (
-    <div className="flex flex-col gap-1">
-      <div className="text-2xl font-bold text-slate-900">Центр рекомендацій</div>
-      <div className="text-sm text-slate-600">
-        {fake.periodLabel} · Згенеровано: {fake.generatedAt}
-      </div>
-    </div>
-  );
-
-  const topBar = (
-    <div className="flex items-center justify-between gap-3">
-      {header}
-      <div className="flex items-center gap-2">
-        <GhostButton onClick={() => alert("У реальному проєкті тут: GET snapshot / кеш")}>
-          Оновити дані
-        </GhostButton>
-        <PrimaryButton onClick={() => alert("У реальному проєкті тут: POST recompute → оновити snapshot")}>
-          Перерахувати
-        </PrimaryButton>
-      </div>
-    </div>
-  );
+  const overview = fake.overviewByPeriod[overviewPeriod];
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {topBar}
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="text-2xl font-bold text-slate-900">Центр рекомендацій</div>
+            <div className="text-sm text-slate-600">Згенеровано: {fake.generatedAt}</div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <GhostButton onClick={() => alert("У реальному проєкті: GET snapshot (cache/TTL)")}>
+              Оновити дані
+            </GhostButton>
+            <PrimaryButton onClick={() => alert("У реальному проєкті: POST recompute → оновити snapshot")}>
+              Перерахувати
+            </PrimaryButton>
+          </div>
+        </div>
 
         {/* Tabs */}
         <div className="mt-6 bg-white border border-slate-200 rounded-xl p-2 flex flex-wrap gap-2">
@@ -338,31 +447,116 @@ export default function RecommendationsMockPage() {
 
         {/* Content */}
         <div className="mt-6 grid gap-4">
-          {tab === "overview" && <OverviewSection data={fake.overview} onGoto={setTab} />}
+          {tab === "recs" && <RecommendationsSection data={fake.recommendations} onGoto={setTab} />}
+          {tab === "overview" && (
+            <OverviewSection
+              data={overview}
+              period={overviewPeriod}
+              onPeriodChange={setOverviewPeriod}
+            />
+          )}
           {tab === "anomalies" && <AnomaliesSection data={fake.anomalies} />}
           {tab === "forecast" && <ForecastSection data={fake.forecast} />}
           {tab === "goals" && <GoalsSection data={fake.goals} />}
           {tab === "patterns" && <PatternsSection data={fake.patterns} />}
         </div>
       </div>
-
-      {/* Tailwind-free fallback: якщо у вас немає Tailwind, це все одно працюватиме,
-          але вигляд буде "голий". У вашому проєкті ймовірно є стилі/компоненти — замініть класи під себе. */}
     </div>
   );
 }
 
-function OverviewSection({ data, onGoto }) {
+/* =======================
+   1) Рекомендації (Inbox)
+   ======================= */
+
+function RecommendationsSection({ data, onGoto }) {
+  return (
+    <div className="grid gap-4">
+      <Card
+        title="Усі рекомендації"
+        subtitle="Головна сторінка: короткі повідомлення + переходи до пояснень/візуалізацій"
+        right={<span className="text-sm text-slate-500">Груп: {data.groups.length}</span>}
+      >
+        <div className="grid gap-4">
+          {data.groups.map((g, idx) => (
+            <div key={idx} className="border border-slate-200 rounded-xl p-4">
+              <div className="text-sm font-semibold text-slate-900">{g.title}</div>
+              <div className="mt-3 grid gap-3">
+                {g.items.map((r) => (
+                  <RecommendationCard key={r.id} rec={r} onGoto={onGoto} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function RecommendationCard({ rec, onGoto }) {
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 bg-white">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-sm font-semibold text-slate-900">{rec.title}</div>
+            <ModulePill moduleKey={rec.module} />
+            <SeverityPill severity={rec.severity} />
+          </div>
+
+          <div className="text-sm text-slate-600 mt-1">{rec.message}</div>
+
+          {rec.facts?.length ? (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {rec.facts.slice(0, 3).map((f, i) => (
+                <span key={i} className="px-2 py-1 text-xs border rounded-full bg-slate-50 text-slate-700">
+                  {f}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-2 shrink-0">
+          <PrimaryButton onClick={() => onGoto(rec.primaryCta.goto)}>{rec.primaryCta.label}</PrimaryButton>
+          <GhostButton onClick={() => onGoto(rec.secondaryCta.goto)}>{rec.secondaryCta.label}</GhostButton>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <GhostButton onClick={() => alert("У реальному проєкті: dismiss (persist action)")}>Відхилити</GhostButton>
+        <GhostButton onClick={() => alert("У реальному проєкті: snooze (persist action)")}>Відкласти</GhostButton>
+        <GhostButton onClick={() => alert("У реальному проєкті: mark done (persist action)")}>Виконано</GhostButton>
+      </div>
+    </div>
+  );
+}
+
+/* =======================
+   2) Огляд (7/30/90)
+   ======================= */
+
+function OverviewSection({ data, period, onPeriodChange }) {
   return (
     <>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-lg font-semibold text-slate-900">Огляд</div>
+          <div className="text-sm text-slate-600">{data.label}</div>
+        </div>
+
+        <Segmented options={OVERVIEW_PERIODS} value={period} onChange={onPeriodChange} />
+      </div>
+
       <div className="grid md:grid-cols-3 gap-4">
-        <Card title="Доходи" subtitle="Сума за період" right={<span className="text-sm text-slate-500">30 днів</span>}>
+        <Card title="Доходи" subtitle="Сума за період">
           <div className="text-2xl font-bold">{formatMoney(data.income)}</div>
         </Card>
-        <Card title="Витрати" subtitle="Сума за період" right={<span className="text-sm text-slate-500">30 днів</span>}>
+        <Card title="Витрати" subtitle="Сума за період">
           <div className="text-2xl font-bold">{formatMoney(data.expense)}</div>
         </Card>
-        <Card title="Чистий результат" subtitle="Доходи − витрати" right={<span className="text-sm text-slate-500">30 днів</span>}>
+        <Card title="Чистий результат" subtitle="Доходи − витрати">
           <div className="text-2xl font-bold">{formatMoney(data.net)}</div>
         </Card>
       </div>
@@ -379,26 +573,28 @@ function OverviewSection({ data, onGoto }) {
           </div>
         </Card>
 
-        <Card title="Пріоритетні дії" subtitle="Що варто зробити в першу чергу">
-          <div className="grid gap-3">
-            {data.priorityActions.map((a, idx) => (
-              <div key={idx} className="border border-slate-200 rounded-xl p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-semibold text-slate-900">{a.title}</div>
-                  <SeverityPill severity={a.severity} />
-                </div>
-                <div className="text-sm text-slate-600 mt-1">{a.text}</div>
-                <div className="mt-3">
-                  <PrimaryButton onClick={() => onGoto(a.cta.goto)}>{a.cta.label}</PrimaryButton>
-                </div>
+        <Card title="Ключові спостереження" subtitle="Швидкі висновки саме для обраного періоду">
+          <div className="grid gap-2">
+            {data.highlights.map((h, i) => (
+              <div key={i} className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3">
+                <div className="text-sm text-slate-800">{h.text}</div>
+                <SeverityPill severity={h.severity} />
               </div>
             ))}
+          </div>
+
+          <div className="mt-4 text-sm text-slate-600">
+            Примітка: огляд — періодозалежний. Рекомендації (в першій вкладці) — загальні і не “стрибнуть” від перемикача.
           </div>
         </Card>
       </div>
     </>
   );
 }
+
+/* =======================
+   3) Аномалії
+   ======================= */
 
 function AnomaliesSection({ data }) {
   return (
@@ -443,8 +639,8 @@ function AnomaliesSection({ data }) {
                 </td>
                 <td className="py-3 pr-3">
                   <div className="flex flex-wrap gap-2">
-                    <GhostButton onClick={() => alert("Mark as normal (persist feedback)")}>Це нормально</GhostButton>
-                    <PrimaryButton onClick={() => alert("Flag fraud (persist feedback)")}>Підозріло</PrimaryButton>
+                    <GhostButton onClick={() => alert("Mark as normal (persist action)")}>Це нормально</GhostButton>
+                    <PrimaryButton onClick={() => alert("Flag suspicious (persist action)")}>Підозріло</PrimaryButton>
                   </div>
                 </td>
               </tr>
@@ -456,13 +652,17 @@ function AnomaliesSection({ data }) {
   );
 }
 
+/* =======================
+   4) Прогноз
+   ======================= */
+
 function ForecastSection({ data }) {
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <Card title="Прогноз балансу" subtitle={`Горизонт: ${data.horizon}`}>
         <MiniSparkline points={data.seriesBalance} />
         <div className="text-sm text-slate-600 mt-3">
-          Це приклад: тут може бути баланс або окремо доходи/витрати двома лініями (але для макета достатньо однієї).
+          Тут легко додати другу лінію (доходи/витрати), але для макета вистачає балансу.
         </div>
       </Card>
 
@@ -476,12 +676,16 @@ function ForecastSection({ data }) {
           ))}
         </div>
         <div className="mt-4 text-sm text-slate-600">
-          У реальному проєкті поруч доречно дати “що робити”: лінк на бюджет/категорію або CTA “переглянути витрати”.
+          У реальному UI тут зазвичай є CTA “переглянути витрати по категорії” або “налаштувати бюджет”.
         </div>
       </Card>
     </div>
   );
 }
+
+/* =======================
+   5) Цілі (Monte-Carlo)
+   ======================= */
 
 function GoalsSection({ data }) {
   const g = data.goal;
@@ -496,7 +700,7 @@ function GoalsSection({ data }) {
       >
         <Gauge value={data.probability} />
         <div className="mt-4 text-sm text-slate-600">
-          Під “капотом” це Монте-Карло. UI не повідомленням, а конкретним показником: ймовірність до дедлайну.
+          Це “візуальна суть” Монте-Карло: ймовірність досягнення до дедлайну + сценарії.
         </div>
       </Card>
 
@@ -516,9 +720,7 @@ function GoalsSection({ data }) {
                 </div>
               </div>
               <div className="mt-3">
-                <PrimaryButton onClick={() => alert("Apply scenario: update plan / goal settings")}>
-                  Застосувати
-                </PrimaryButton>
+                <PrimaryButton onClick={() => alert("Apply scenario: update goal/plan")}>Застосувати</PrimaryButton>
               </div>
             </div>
           ))}
@@ -532,12 +734,16 @@ function GoalsSection({ data }) {
           height={160}
         />
         <div className="text-sm text-slate-600 mt-3">
-          Тут можна показати гістограму/area-chart, але для макета SVG-лінія достатня.
+          У реальній реалізації це буде гістограма/area-chart, але макет вже дає правильну структуру.
         </div>
       </Card>
     </div>
   );
 }
+
+/* =======================
+   6) Патерни (кластеризація)
+   ======================= */
 
 function PatternsSection({ data }) {
   return (
@@ -563,12 +769,8 @@ function PatternsSection({ data }) {
                 <div className="text-sm font-semibold">Рекомендація</div>
                 <div className="text-sm text-slate-600 mt-1">{c.recommendation}</div>
                 <div className="mt-3 flex gap-2">
-                  <PrimaryButton onClick={() => alert("Create budget / rule / review transactions")}>
-                    Дія
-                  </PrimaryButton>
-                  <GhostButton onClick={() => alert("Open details: list of transactions in this cluster")}>
-                    Деталі
-                  </GhostButton>
+                  <PrimaryButton onClick={() => alert("Create budget / rule / review transactions")}>Дія</PrimaryButton>
+                  <GhostButton onClick={() => alert("Open details: transactions in this cluster")}>Деталі</GhostButton>
                 </div>
               </div>
             </div>
