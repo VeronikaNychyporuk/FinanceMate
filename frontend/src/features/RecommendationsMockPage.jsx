@@ -608,7 +608,6 @@ function AnomaliesSection({ data }) {
           <thead className="text-left text-slate-500">
             <tr>
               <th className="py-2 pr-3">Дата</th>
-              <th className="py-2 pr-3">Мерчант</th>
               <th className="py-2 pr-3">Категорія</th>
               <th className="py-2 pr-3">Сума</th>
               <th className="py-2 pr-3">Причини</th>
@@ -619,7 +618,6 @@ function AnomaliesSection({ data }) {
             {data.items.map((x) => (
               <tr key={x.id} className="border-t border-slate-200">
                 <td className="py-3 pr-3">{x.date}</td>
-                <td className="py-3 pr-3">{x.merchant}</td>
                 <td className="py-3 pr-3">{x.category}</td>
                 <td className="py-3 pr-3 font-semibold">{formatMoney(x.amount)}</td>
                 <td className="py-3 pr-3">
