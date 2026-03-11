@@ -12,6 +12,7 @@ const transactionRoutes = require("./routes/transaction.routes");
 const goalRoutes = require("./routes/goal.routes");
 const goalTransactionRoutes = require("./routes/goalTransaction.routes");
 const recurringTransactionRoutes = require("./routes/recurringTransaction.routes");
+const recommendationRoutes = require("./routes/recommendation.routes");
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/goals/:goalId/transactions", goalTransactionRoutes);
 app.use("/api/recurring-transactions", recurringTransactionRoutes);
+app.use("/api/recommendations", recommendationRoutes);
 
 module.exports = app;
