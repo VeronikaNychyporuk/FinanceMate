@@ -6,6 +6,10 @@ const {
   snoozeRecommendation,
 } = require("../services/recommendation.service");
 
+const {
+  generateRecommendationsForUser,
+} = require("../services/recommendationGeneration.service");
+
 exports.getRecommendations = async (req, res) => {
   try {
     const result = await fetchRecommendations(req.userId, req.query);
@@ -74,5 +78,21 @@ exports.patchRecommendationSnooze = async (req, res) => {
       err.message === "Рекомендацію не знайдено." ? 404 : 400;
 
     res.status(statusCode).json({ message: err.message });
+  }
+};
+
+exports.generateRecommendations = async (req, res) => {
+  try {
+    const result = await generateRecommendationsForUser(req.userId);
+
+    res.status(200).json({
+      message: "Рекомендації та snapshot успішно згенеровано.",
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: "Не вдалося згенерувати рекомендації.",
+      error: err.message,
+    });
   }
 };

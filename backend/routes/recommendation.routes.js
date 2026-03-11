@@ -11,6 +11,7 @@ const {
   getRecommendationSnapshot,
   patchRecommendationStatus,
   patchRecommendationSnooze,
+  generateRecommendations,
 } = require("../controllers/recommendation.controller");
 
 const {
@@ -24,6 +25,12 @@ router.get(
   authMiddleware,
   validateQuery(getRecommendationsQuerySchema),
   getRecommendations
+);
+
+router.post(
+  "/generate",
+  authMiddleware,
+  generateRecommendations
 );
 
 router.get(
