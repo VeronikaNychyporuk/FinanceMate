@@ -27,6 +27,7 @@ import RecurringTransactionsPage from '../features/RecurringTransactionsPage';
 import EditRecurringTransactionPage from '../features/EditRecurringTransactionPage';
 import AddRecurringTransactionPage from '../features/AddRecurringTransactionPage';
 import NotFoundPage from '../features/NotFoundPage';
+import RecommendationsPage from '../features/RecommendationsPage';
 
 import Mock from '../features/RecommendationsMockPage';
 
@@ -62,7 +63,8 @@ function AppRouter() {
       <Route path="/recurring-transactions" element={<PrivateRoute><Layout><RecurringTransactionsPage /></Layout></PrivateRoute>}/>
       <Route path="/recurring-transactions/edit/:id" element={<PrivateRoute><Layout><EditRecurringTransactionPage /></Layout></PrivateRoute>}/>
       <Route path="/recurring-transactions/new" element={<PrivateRoute><Layout><AddRecurringTransactionPage /></Layout></PrivateRoute>}/>
-      <Route path="/recommendations" element={<PrivateRoute><Layout><Mock /></Layout></PrivateRoute>} />
+      <Route path="/recommendations" element={<PrivateRoute><Layout><RecommendationsPage /></Layout></PrivateRoute>} />
+      <Route path="/recommendationsMock" element={<PrivateRoute><Layout><Mock /></Layout></PrivateRoute>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

@@ -58,7 +58,8 @@ export default function Layout({ children }) {
     { label: 'Транзакції', icon: <ListAlt />, path: '/transactions' },
     { label: 'Регулярні транзакції', icon: <EventRepeat />, path: '/recurring-transactions' },
     { label: 'Цілі', icon: <Flag />, path: '/goals' },
-    { label: 'Рекомендації', icon: <Flag />, path: '/recommendations' }
+    { label: 'Рекомендації', icon: <Flag />, path: '/recommendations' },
+    { label: 'РекомендаціїMock', icon: <Flag />, path: '/recommendationsMock' }
   ];
 
   useEffect(() => {
