@@ -4,6 +4,10 @@ const Goal = require("../models/Goal");
 const Recommendation = require("../models/Recommendation");
 const RecommendationSnapshot = require("../models/RecommendationSnapshot");
 
+const {
+  analyzeRuleBasedFinancials,
+} = require("./recommendations/algorithms/ruleBasedFinancialAnalytics");
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_TTL_HOURS = 24;
 
@@ -93,56 +97,7 @@ const groupExpenseByCategory = (transactions) => {
   return [...map.values()].sort((a, b) => b.amount - a.amount);
 };
 
-const buildOverviewPeriod = (transactions, days) => {
-  const from = buildDateRangeFilter(days).$gte;
-  const periodTransactions = transactions.filter((tx) => tx.date >= from);
 
-  const income = periodTransactions
-    .filter((tx) => tx.type === "income")
-    .reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
-
-  const expense = periodTransactions
-    .filter((tx) => tx.type === "expense")
-    .reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
-
-  const net = income - expense;
-
-  const topDrivers = groupExpenseByCategory(
-    periodTransactions.filter((tx) => tx.type === "expense")
-  )
-    .slice(0, 3)
-    .map((item) => ({
-      categoryId: item.categoryId,
-      category: item.categoryName,
-      amount: round(item.amount),
-      share: expense > 0 ? round((item.amount / expense) * 100) : 0,
-    }));
-
-  const highlights = [];
-
-  if (expense > income) {
-    highlights.push("Витрати перевищують доходи в обраному періоді.");
-  }
-
-  if (topDrivers[0]) {
-    highlights.push(
-      `Найбільший вплив на витрати має категорія «${topDrivers[0].category}».`
-    );
-  }
-
-  if (!highlights.length) {
-    highlights.push("Фінансовий баланс у межах періоду виглядає стабільним.");
-  }
-
-  return {
-    label: `${days} днів`,
-    income: round(income),
-    expense: round(expense),
-    net: round(net),
-    topDrivers,
-    highlights,
-  };
-};
 
 const detectAnomalies = (expenseTransactions) => {
   const grouped = new Map();
@@ -457,35 +412,6 @@ const buildPatterns = (expenseTransactions) => {
   return { clusters };
 };
 
-const buildBudgetAnalysis = (budget, expenseTransactions) => {
-  if (!budget) {
-    return null;
-  }
-
-  const monthStart = new Date(budget.period.year, budget.period.month - 1, 1);
-  const monthEnd = new Date(budget.period.year, budget.period.month, 1);
-
-  const monthlyExpenses = expenseTransactions.filter(
-    (tx) => tx.date >= monthStart && tx.date < monthEnd
-  );
-
-  const totalSpent = monthlyExpenses.reduce(
-    (sum, tx) => sum + tx.amountInBaseCurrency,
-    0
-  );
-
-  const percentage =
-    budget.totalLimit > 0 ? (totalSpent / budget.totalLimit) * 100 : 0;
-
-  return {
-    month: budget.period.month,
-    year: budget.period.year,
-    totalLimit: round(budget.totalLimit),
-    totalSpent: round(totalSpent),
-    usagePercent: round(percentage),
-  };
-};
-
 const buildRecommendationDocument = (userId, partial) => ({
   userId,
   status: "active",
@@ -494,100 +420,69 @@ const buildRecommendationDocument = (userId, partial) => ({
   ...partial,
 });
 
+const buildRuleBasedRecommendations = ({ userId, findings }) => {
+  if (!Array.isArray(findings) || !findings.length) {
+    return [];
+  }
+
+  return findings.map((finding) => {
+    let groupKey = "spending_optimization";
+    let groupLabel = GROUP_LABELS.spending_optimization;
+
+    if (
+      finding.priority === "high" ||
+      finding.type === "balance_warning" ||
+      finding.type === "budget_risk"
+    ) {
+      groupKey = "immediate_actions";
+      groupLabel = GROUP_LABELS.immediate_actions;
+    } else if (
+      finding.type === "behavior_insight" ||
+      finding.type === "trend_change"
+    ) {
+      groupKey = "planning_ahead";
+      groupLabel = GROUP_LABELS.planning_ahead;
+    }
+
+    return buildRecommendationDocument(userId, {
+      type: finding.type,
+      module: finding.module,
+      priority: finding.priority,
+      groupKey,
+      groupLabel,
+      title: finding.title,
+      message: finding.message,
+      facts: finding.facts || [],
+      explanation: finding.explanation || null,
+      relatedEntity: finding.relatedEntity || null,
+      primaryAction: finding.primaryAction || null,
+      secondaryAction: finding.secondaryAction || null,
+      context: finding.context || null,
+      expiresAt:
+        finding.priority === "high"
+          ? addDays(new Date(), 10)
+          : finding.priority === "medium"
+          ? addDays(new Date(), 21)
+          : addDays(new Date(), 30),
+    });
+  });
+};
+
 const buildRecommendations = ({
   userId,
-  overview30,
+  ruleBasedAnalysis,
   anomalies,
   goalsAnalysis,
   patterns,
-  budgetAnalysis,
 }) => {
   const recommendations = [];
-  const topDriver = overview30.topDrivers[0] || null;
 
-  if (overview30.expense > overview30.income) {
-    recommendations.push(
-      buildRecommendationDocument(userId, {
-        type: "balance_warning",
-        module: "forecast",
-        priority: "high",
-        groupKey: "immediate_actions",
-        groupLabel: GROUP_LABELS.immediate_actions,
-        title: "Витрати вже перевищують доходи",
-        message:
-          "За останні 30 днів витрати перевищили доходи. Варто скоригувати витрати, щоб уникнути подальшого погіршення фінансового балансу.",
-        facts: [
-          `Доходи: ${overview30.income}`,
-          `Витрати: ${overview30.expense}`,
-          `Нетто: ${overview30.net}`,
-        ],
-        explanation:
-          "Рекомендація сформована на основі співвідношення доходів і витрат за останні 30 днів.",
-        primaryAction: {
-          label: "Відкрити прогноз",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "forecast",
-        },
-        secondaryAction: {
-          label: "Переглянути огляд",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "overview",
-        },
-        context: {
-          income30: overview30.income,
-          expense30: overview30.expense,
-          net30: overview30.net,
-        },
-        expiresAt: addDays(new Date(), 14),
-      })
-    );
-  }
-
-  if (topDriver && topDriver.share >= 35) {
-    recommendations.push(
-      buildRecommendationDocument(userId, {
-        type: "spending_optimization",
-        module: "overview",
-        priority: "medium",
-        groupKey: "spending_optimization",
-        groupLabel: GROUP_LABELS.spending_optimization,
-        title: `Категорія «${topDriver.category}» формує найбільшу частку витрат`,
-        message: `Категорія «${topDriver.category}» становить ${topDriver.share}% витрат за останні 30 днів. Саме тут потенціал оптимізації виглядає найбільшим.`,
-        facts: [
-          `Категорія: ${topDriver.category}`,
-          `Частка: ${topDriver.share}%`,
-          `Сума: ${topDriver.amount}`,
-        ],
-        explanation:
-          "Рекомендація ґрунтується на аналізі структури витрат за останні 30 днів.",
-        relatedEntity: topDriver.categoryId
-          ? {
-              entityType: "category",
-              entityId: topDriver.categoryId,
-              label: topDriver.category,
-            }
-          : null,
-        primaryAction: {
-          label: "Переглянути огляд",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "overview",
-        },
-        secondaryAction: {
-          label: "До патернів витрат",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "patterns",
-        },
-        context: {
-          topDriver,
-        },
-        expiresAt: addDays(new Date(), 21),
-      })
-    );
-  }
+  recommendations.push(
+    ...buildRuleBasedRecommendations({
+      userId,
+      findings: ruleBasedAnalysis.findings,
+    })
+  );
 
   if (anomalies.length) {
     const anomaly = anomalies[0];
@@ -628,36 +523,6 @@ const buildRecommendations = ({
         },
         context: anomaly,
         expiresAt: addDays(new Date(), 7),
-      })
-    );
-  }
-
-  if (budgetAnalysis && budgetAnalysis.usagePercent >= 80) {
-    recommendations.push(
-      buildRecommendationDocument(userId, {
-        type: "budget_risk",
-        module: "overview",
-        priority: budgetAnalysis.usagePercent >= 95 ? "high" : "medium",
-        groupKey: "immediate_actions",
-        groupLabel: GROUP_LABELS.immediate_actions,
-        title: "Є ризик перевищення бюджету",
-        message: `Поточні витрати вже використали ${budgetAnalysis.usagePercent}% місячного бюджету. Варто скоригувати витрати до кінця періоду.`,
-        facts: [
-          `Ліміт: ${budgetAnalysis.totalLimit}`,
-          `Витрачено: ${budgetAnalysis.totalSpent}`,
-          `Використано: ${budgetAnalysis.usagePercent}%`,
-        ],
-        explanation:
-          "Рекомендація сформована на основі аналізу поточного бюджету користувача та фактичних витрат за місяць.",
-        primaryAction: {
-          label: "Переглянути огляд",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "overview",
-        },
-        secondaryAction: null,
-        context: budgetAnalysis,
-        expiresAt: addDays(new Date(), 10),
       })
     );
   }
@@ -831,25 +696,26 @@ exports.generateRecommendationsForUser = async (userId) => {
     Goal.find({ userId }).sort({ deadline: 1 }),
   ]);
 
-  const overview7 = buildOverviewPeriod(transactions, 7);
-  const overview30 = buildOverviewPeriod(transactions, 30);
-  const overview90 = buildOverviewPeriod(transactions, 90);
+  const ruleBasedAnalysis = analyzeRuleBasedFinancials({
+    transactions,
+    expenseTransactions,
+    budget,
+    now,
+  });
 
   const anomalies = detectAnomalies(expenseTransactions);
   const forecast = buildForecast(transactions);
   const goalsAnalysis = buildGoalsAnalysis(goals, transactions);
   const patterns = buildPatterns(expenseTransactions);
-  const budgetAnalysis = buildBudgetAnalysis(budget, expenseTransactions);
 
   await archiveCurrentRecommendations(userId);
 
   const recommendationPayload = buildRecommendations({
     userId,
-    overview30,
+    ruleBasedAnalysis,
     anomalies,
     goalsAnalysis,
     patterns,
-    budgetAnalysis,
   });
 
   const createdRecommendations = recommendationPayload.length
@@ -860,10 +726,12 @@ exports.generateRecommendationsForUser = async (userId) => {
     recommendations: {
       groups: buildRecommendationGroups(createdRecommendations),
     },
-    overviewByPeriod: {
-      "7d": overview7,
-      "30d": overview30,
-      "90d": overview90,
+    overviewByPeriod: ruleBasedAnalysis.metrics.overviewByPeriod,
+    ruleBasedAnalysis: {
+      comparison30: ruleBasedAnalysis.metrics.comparison30,
+      budgetAnalysis: ruleBasedAnalysis.metrics.budgetAnalysis,
+      dataSufficiency: ruleBasedAnalysis.metrics.dataSufficiency,
+      signals: ruleBasedAnalysis.signals,
     },
     anomalies: {
       items: anomalies,
