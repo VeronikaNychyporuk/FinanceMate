@@ -7,6 +7,9 @@ const RecommendationSnapshot = require("../models/RecommendationSnapshot");
 const {
   analyzeRuleBasedFinancials,
 } = require("./recommendations/algorithms/ruleBasedFinancialAnalytics");
+const {
+  analyzeAnomalies,
+} = require("./recommendations/algorithms/anomalyDetection");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_TTL_HOURS = 24;
@@ -99,60 +102,6 @@ const groupExpenseByCategory = (transactions) => {
 
 
 
-const detectAnomalies = (expenseTransactions) => {
-  const grouped = new Map();
-
-  expenseTransactions.forEach((tx) => {
-    const key =
-      tx.categoryId?._id?.toString() ||
-      tx.categoryId?.toString() ||
-      "unknown";
-
-    const bucket = grouped.get(key) || [];
-    bucket.push(tx);
-    grouped.set(key, bucket);
-  });
-
-  const anomalies = [];
-
-  grouped.forEach((transactions) => {
-    if (transactions.length < 3) return;
-
-    const amounts = transactions.map((tx) => tx.amountInBaseCurrency);
-    const mean = average(amounts);
-    const std = stdDeviation(amounts, mean);
-    const threshold = Math.max(mean * 1.6, mean + std * 1.5);
-
-    transactions.forEach((tx) => {
-      if (tx.amountInBaseCurrency <= threshold) return;
-
-      const reasons = [];
-      reasons.push(
-        `Сума ${round(
-          tx.amountInBaseCurrency
-        )} є значно вищою за типове значення ${round(mean)}.`
-      );
-
-      if (!tx.note || tx.note.trim().length === 0) {
-        reasons.push("Операція не містить пояснювальної нотатки.");
-      }
-
-      anomalies.push({
-        transactionId: tx._id,
-        date: tx.date,
-        merchant: tx.note || "Без назви",
-        category: tx.categoryId?.name || "Без категорії",
-        categoryId: tx.categoryId?._id || null,
-        amount: round(tx.amountInBaseCurrency),
-        severity: tx.amountInBaseCurrency > threshold * 1.25 ? "high" : "medium",
-        reasons,
-        reviewStatus: "new",
-      });
-    });
-  });
-
-  return anomalies.sort((a, b) => b.amount - a.amount).slice(0, 10);
-};
 
 const buildForecast = (transactions) => {
   const last60Days = transactions.filter(
@@ -471,7 +420,7 @@ const buildRuleBasedRecommendations = ({ userId, findings }) => {
 const buildRecommendations = ({
   userId,
   ruleBasedAnalysis,
-  anomalies,
+  anomalyAnalysis,
   goalsAnalysis,
   patterns,
 }) => {
@@ -484,47 +433,54 @@ const buildRecommendations = ({
     })
   );
 
-  if (anomalies.length) {
-    const anomaly = anomalies[0];
-
-    recommendations.push(
-      buildRecommendationDocument(userId, {
-        type: "anomaly_alert",
-        module: "anomalies",
-        priority: anomaly.severity === "high" ? "high" : "medium",
-        groupKey: "immediate_actions",
-        groupLabel: GROUP_LABELS.immediate_actions,
-        title: "Виявлено нетипову витрату",
-        message: `Система зафіксувала нетипову операцію в категорії «${anomaly.category}» на суму ${anomaly.amount}. Варто перевірити цю транзакцію.`,
-        facts: [
-          `Категорія: ${anomaly.category}`,
-          `Сума: ${anomaly.amount}`,
-          `Причини: ${anomaly.reasons.length}`,
-        ],
-        explanation: anomaly.reasons.join(" "),
-        relatedEntity: anomaly.transactionId
-          ? {
-              entityType: "transaction",
-              entityId: anomaly.transactionId,
-              label: anomaly.merchant,
-            }
-          : null,
-        primaryAction: {
-          label: "Переглянути аномалії",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "anomalies",
-        },
-        secondaryAction: {
-          label: "Відкрити транзакцію",
-          actionType: "open_entity",
-          targetType: "transaction",
-          targetValue: anomaly.transactionId.toString(),
-        },
-        context: anomaly,
-        expiresAt: addDays(new Date(), 7),
-      })
+  if (anomalyAnalysis?.topAnomalies?.length) {
+    const actionableAnomaly = anomalyAnalysis.topAnomalies.find(
+      (item) => item.severity === "high" || item.severity === "medium"
     );
+
+    if (actionableAnomaly) {
+      recommendations.push(
+        buildRecommendationDocument(userId, {
+          type: "anomaly_alert",
+          module: "anomalies",
+          priority: actionableAnomaly.severity === "high" ? "high" : "medium",
+          groupKey: "immediate_actions",
+          groupLabel: GROUP_LABELS.immediate_actions,
+          title: "Виявлено нетипову витрату",
+          message: `Система зафіксувала нетипову операцію в категорії «${actionableAnomaly.category}» на суму ${actionableAnomaly.amount}. Рекомендується перевірити цю транзакцію.`,
+          facts: [
+            `Категорія: ${actionableAnomaly.category}`,
+            `Сума: ${actionableAnomaly.amount}`,
+            `Anomaly score: ${actionableAnomaly.anomalyScore}/100`,
+            `Рівень: ${actionableAnomaly.severity}`,
+          ],
+          explanation: actionableAnomaly.reasons.join(" "),
+          relatedEntity: actionableAnomaly.transactionId
+            ? {
+                entityType: "transaction",
+                entityId: actionableAnomaly.transactionId,
+                label: actionableAnomaly.label,
+              }
+            : null,
+          primaryAction: {
+            label: "Переглянути аномалії",
+            actionType: "navigate",
+            targetType: "tab",
+            targetValue: "anomalies",
+          },
+          secondaryAction: actionableAnomaly.transactionId
+            ? {
+                label: "Відкрити транзакцію",
+                actionType: "open_entity",
+                targetType: "transaction",
+                targetValue: actionableAnomaly.transactionId.toString(),
+              }
+            : null,
+          context: actionableAnomaly,
+          expiresAt: addDays(new Date(), 7),
+        })
+      );
+    }
   }
 
   if (goalsAnalysis.goal && goalsAnalysis.probability < 65) {
@@ -703,7 +659,11 @@ exports.generateRecommendationsForUser = async (userId) => {
     now,
   });
 
-  const anomalies = detectAnomalies(expenseTransactions);
+  const anomalyAnalysis = analyzeAnomalies({
+    transactions,
+    budget,
+    now,
+  });
   const forecast = buildForecast(transactions);
   const goalsAnalysis = buildGoalsAnalysis(goals, transactions);
   const patterns = buildPatterns(expenseTransactions);
@@ -713,7 +673,7 @@ exports.generateRecommendationsForUser = async (userId) => {
   const recommendationPayload = buildRecommendations({
     userId,
     ruleBasedAnalysis,
-    anomalies,
+    anomalyAnalysis,
     goalsAnalysis,
     patterns,
   });
@@ -733,10 +693,7 @@ exports.generateRecommendationsForUser = async (userId) => {
       dataSufficiency: ruleBasedAnalysis.metrics.dataSufficiency,
       signals: ruleBasedAnalysis.signals,
     },
-    anomalies: {
-      items: anomalies,
-      total: anomalies.length,
-    },
+    anomalies: anomalyAnalysis,
     forecast,
     goals: goalsAnalysis,
     patterns,
@@ -757,7 +714,7 @@ exports.generateRecommendationsForUser = async (userId) => {
         data: snapshotData,
         meta: {
           recommendationCount: createdRecommendations.length,
-          anomalyCount: anomalies.length,
+          anomalyCount: anomalyAnalysis.items.length,
           transactionCount: transactions.length,
         },
       },
