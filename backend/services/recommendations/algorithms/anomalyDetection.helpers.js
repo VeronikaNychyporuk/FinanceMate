@@ -159,6 +159,32 @@ const prepareExpenseTransactions = (transactions = []) => {
   };
 };
 
+const buildPreviousCategoryTransactionMap = (transactions = []) => {
+  const previousByTransactionId = new Map();
+  const lastSeenByCategory = new Map();
+
+  const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  sorted.forEach((tx) => {
+    const txId = tx._id.toString();
+    const categoryId = getCategoryId(tx);
+    const txDate = new Date(tx.date);
+
+    const previousDate = lastSeenByCategory.get(categoryId) || null;
+
+    previousByTransactionId.set(txId, {
+      previousCategoryTransactionDate: previousDate,
+      daysSincePreviousCategoryTransaction: previousDate
+        ? daysBetween(previousDate, txDate)
+        : null,
+    });
+
+    lastSeenByCategory.set(categoryId, txDate);
+  });
+
+  return previousByTransactionId;
+};
+
 const splitBaselineAndCandidates = (
   expenses,
   {
@@ -420,7 +446,11 @@ const computeCategoryAmountScore = (amount, categoryStats) => {
   };
 };
 
-const computeNoveltyScore = ({ categoryStats, transactionDate, now = new Date() }) => {
+const computeNoveltyScore = ({
+  categoryStats,
+  previousCategoryTransactionDate,
+  transactionDate,
+}) => {
   if (!categoryStats || categoryStats.count === 0) {
     return {
       score: 1,
@@ -432,17 +462,26 @@ const computeNoveltyScore = ({ categoryStats, transactionDate, now = new Date() 
     };
   }
 
-  const daysSinceLastSeen = categoryStats.lastSeenAt
-    ? daysBetween(categoryStats.lastSeenAt, transactionDate || now)
-    : null;
+  if (!previousCategoryTransactionDate) {
+    return {
+      score: 0,
+      reason: null,
+      metrics: {
+        isNewCategory: false,
+        daysSinceLastSeen: null,
+      },
+    };
+  }
+
+  const daysSinceLastSeen = daysBetween(previousCategoryTransactionDate, transactionDate);
 
   let score = 0;
   let reason = null;
 
-  if (Number.isFinite(daysSinceLastSeen) && daysSinceLastSeen > 60) {
+  if (daysSinceLastSeen > 90) {
     score = 0.6;
     reason = `Категорія не використовувалась ${daysSinceLastSeen} днів.`;
-  } else if (Number.isFinite(daysSinceLastSeen) && daysSinceLastSeen > 30) {
+  } else if (daysSinceLastSeen > 60) {
     score = 0.3;
     reason = `Категорія не використовувалась ${daysSinceLastSeen} днів.`;
   }
@@ -590,14 +629,31 @@ const computeConfidence = ({ userStats, categoryStats }) => {
 };
 
 const combineAnomalyScore = (featureScores, confidenceCombined) => {
-  const rawScore =
-    0.3 * Number(featureScores.categoryAmount || 0) +
-    0.2 * Number(featureScores.userAmount || 0) +
-    0.2 * Number(featureScores.novelty || 0) +
-    0.15 * Number(featureScores.frequency || 0) +
-    0.15 * Number(featureScores.budgetImpact || 0);
+  const categoryAmount = Number(featureScores.categoryAmount || 0);
+  const userAmount = Number(featureScores.userAmount || 0);
+  const novelty = Number(featureScores.novelty || 0);
+  const frequency = Number(featureScores.frequency || 0);
+  const budgetImpact = Number(featureScores.budgetImpact || 0);
 
-  const adjustedScore = rawScore * (0.6 + 0.4 * Number(confidenceCombined || 0));
+  const rawScore =
+    0.4 * categoryAmount +
+    0.25 * userAmount +
+    0.15 * novelty +
+    0.05 * frequency +
+    0.15 * budgetImpact;
+
+  const extremeAmountSignal =
+    categoryAmount >= 0.95 && userAmount >= 0.95 ? 0.15 : 0;
+
+  const strongBudgetSignal = budgetImpact >= 0.8 ? 0.08 : 0;
+
+  const confidenceMultiplier = 0.85 + 0.15 * Number(confidenceCombined || 0);
+
+  const adjustedScore = Math.min(
+    (rawScore + extremeAmountSignal + strongBudgetSignal) * confidenceMultiplier,
+    1
+  );
+
   const anomalyScore = Math.round(clamp(adjustedScore, 0, 1) * 100);
 
   return {
@@ -634,6 +690,7 @@ module.exports = {
   daysBetween,
   average,
   prepareExpenseTransactions,
+  buildPreviousCategoryTransactionMap,
   splitBaselineAndCandidates,
   buildUserAmountStats,
   buildCategoryStatsMap,

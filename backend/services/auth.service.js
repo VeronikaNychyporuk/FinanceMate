@@ -80,7 +80,7 @@ exports.loginUser = async (email, password) => {
 
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
-    throw new Error("Невірний пароль.");
+    throw new Error("Неправильний пароль.");
   }
 
   if (!user.emailVerified) {

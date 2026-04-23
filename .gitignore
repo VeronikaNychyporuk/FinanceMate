@@ -3,4 +3,7 @@ node_modules/
 .DS_Store
 dist/
 build/
-extensions.json
+.vscode/
+eslint.config.mjs
+__tests__/
+start.txt

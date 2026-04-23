@@ -9,6 +9,7 @@ const {
   buildCategoryStatsMap,
   buildCurrentCategoryFrequencyMap,
   buildBudgetState,
+  buildPreviousCategoryTransactionMap,
   computeUserAmountScore,
   computeCategoryAmountScore,
   computeNoveltyScore,
@@ -30,13 +31,21 @@ const DEFAULT_OPTIONS = {
   minScoreForListing: 40,
 };
 
-const buildSummary = (items, totalAnalyzed, baselineTransactions, candidateTransactions, userStats) => {
+const buildSummary = (
+  items,
+  totalAnalyzed,
+  baselineTransactions,
+  candidateTransactions,
+  userStats
+) => {
   const flagged = items.filter((item) => item.severity !== "normal");
+
   const averageScore = flagged.length
     ? round(flagged.reduce((sum, item) => sum + item.anomalyScore, 0) / flagged.length)
     : 0;
 
-  const confidenceBase = userStats.count >= 30 ? "high" : userStats.count >= 12 ? "medium" : "low";
+  const confidenceBase =
+    userStats.count >= 30 ? "high" : userStats.count >= 12 ? "medium" : "low";
 
   return {
     totalAnalyzed,
@@ -65,7 +74,8 @@ const shouldAnalyzeTransaction = ({
   );
 
   const hasEnoughGlobalHistory = userStats.count >= options.minGlobalBaselineCount;
-  const hasEnoughCategoryHistory = (categoryStats?.count || 0) >= options.minCategoryBaselineCount;
+  const hasEnoughCategoryHistory =
+    (categoryStats?.count || 0) >= options.minCategoryBaselineCount;
   const isNewCategory = !categoryStats || categoryStats.count === 0;
 
   if (amount < minimumRelative) {
@@ -89,21 +99,25 @@ const scoreTransactionAnomaly = ({
   categoryStats,
   currentCategoryFrequency,
   budgetState,
-  now,
+  previousCategoryTransactionDate,
 }) => {
   const amount = getTransactionAmount(transaction);
 
   const userAmount = computeUserAmountScore(amount, userStats);
+
   const categoryAmount = computeCategoryAmountScore(amount, categoryStats);
+
   const novelty = computeNoveltyScore({
     categoryStats,
+    previousCategoryTransactionDate,
     transactionDate: new Date(transaction.date),
-    now,
   });
+
   const frequency = computeFrequencyScore({
     categoryStats,
     currentCategoryFrequency,
   });
+
   const budgetImpact = computeBudgetImpactScore({
     transaction,
     budgetState,
@@ -193,6 +207,9 @@ const analyzeAnomalies = ({
     candidateTransactions,
   });
 
+  const previousCategoryTransactionMap =
+    buildPreviousCategoryTransactionMap(expensesSorted);
+
   const scoredItems = [];
 
   candidateTransactions.forEach((transaction) => {
@@ -210,13 +227,17 @@ const analyzeAnomalies = ({
       return;
     }
 
+    const previousCategoryInfo =
+      previousCategoryTransactionMap.get(transaction._id.toString()) || {};
+
     const result = scoreTransactionAnomaly({
       transaction,
       userStats,
       categoryStats,
       currentCategoryFrequency: currentCategoryFrequencyMap.get(categoryId) || 0,
       budgetState,
-      now,
+      previousCategoryTransactionDate:
+        previousCategoryInfo.previousCategoryTransactionDate || null,
     });
 
     if (result.anomalyScore >= mergedOptions.minScoreForListing) {
