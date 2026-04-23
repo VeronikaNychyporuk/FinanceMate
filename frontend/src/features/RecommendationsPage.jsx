@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 const API_BASE_URL = "http://localhost:5000/api/recommendations";
+const USER_API_URL = "http://localhost:5000/api/user/profile";
 
 const TABS = [
   { key: "recs", label: "Рекомендації" },
@@ -351,7 +352,7 @@ function RecommendationsSection({ groupList, onDismiss, onSnooze, onDone, action
   );
 }
 
-function OverviewSection({ data, period, onPeriodChange }) {
+function OverviewSection({ data, period, onPeriodChange, currency }) {
   if (!data) return <EmptyState text="Snapshot для огляду ще не сформовано." />;
 
   return (
@@ -363,13 +364,13 @@ function OverviewSection({ data, period, onPeriodChange }) {
 
       <div className="grid md:grid-cols-3 gap-4">
         <Card title="Доходи" subtitle="Сума за період">
-          <div className="text-2xl font-bold">{formatMoney(data.income)}</div>
+          <div className="text-2xl font-bold">{formatMoney(data.income, currency)}</div>
         </Card>
         <Card title="Витрати" subtitle="Сума за період">
-          <div className="text-2xl font-bold">{formatMoney(data.expense)}</div>
+          <div className="text-2xl font-bold">{formatMoney(data.expense, currency)}</div>
         </Card>
         <Card title="Чистий результат" subtitle="Доходи − витрати">
-          <div className="text-2xl font-bold">{formatMoney(data.net)}</div>
+          <div className="text-2xl font-bold">{formatMoney(data.net, currency)}</div>
         </Card>
       </div>
 
@@ -388,7 +389,7 @@ function OverviewSection({ data, period, onPeriodChange }) {
                       <span className="ml-2 text-xs text-slate-500">({d.share}%)</span>
                     ) : null}
                   </div>
-                  <b className="text-sm">{formatMoney(d.amount)}</b>
+                  <b className="text-sm">{formatMoney(d.amount, currency)}</b>
                 </div>
               ))}
             </div>
@@ -421,7 +422,7 @@ function OverviewSection({ data, period, onPeriodChange }) {
   );
 }
 
-function AnomaliesSection({ anomalies }) {
+function AnomaliesSection({ anomalies, currency }) {
   if (!anomalies.length) return <EmptyState text="Аномалій не виявлено." />;
 
   return (
@@ -447,7 +448,7 @@ function AnomaliesSection({ anomalies }) {
                 <td className="py-3 pr-3">{formatDate(anomaly.date)}</td>
                 <td className="py-3 pr-3">{anomaly.category || "—"}</td>
                 <td className="py-3 pr-3">{anomaly.merchant || "Без назви"}</td>
-                <td className="py-3 pr-3 font-semibold">{formatMoney(anomaly.amount)}</td>
+                <td className="py-3 pr-3 font-semibold">{formatMoney(anomaly.amount, currency)}</td>
                 <td className="py-3 pr-3">
                   <div className="flex flex-wrap gap-2">
                     <SeverityPill severity={anomaly.severity} />
@@ -472,18 +473,144 @@ function AnomaliesSection({ anomalies }) {
   );
 }
 
-function ForecastSection({ forecast }) {
+function MethodBadge({ method }) {
+  const map = {
+    holt_winters: { label: "Holt-Winters (Triple ES)", color: "bg-indigo-100 text-indigo-700" },
+    double_es:    { label: "Подвійне згладжування (Holt)", color: "bg-sky-100 text-sky-700" },
+    insufficient: { label: "Недостатньо даних", color: "bg-slate-100 text-slate-500" },
+  };
+  const cfg = map[method] || { label: "Аналіз балансу", color: "bg-slate-100 text-slate-500" };
+  return (
+    <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", cfg.color)}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function ConfidenceBadge({ level }) {
+  const map = {
+    high:   { label: "Висока надійність", color: "bg-emerald-100 text-emerald-700" },
+    medium: { label: "Середня надійність", color: "bg-yellow-100 text-yellow-700" },
+    low:    { label: "Низька надійність", color: "bg-orange-100 text-orange-700" },
+    none:   { label: "Немає даних", color: "bg-slate-100 text-slate-400" },
+  };
+  const cfg = map[level] || map.none;
+  return (
+    <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", cfg.color)}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function ForecastChart({ points, width = 520, height = 150 }) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return <div className="text-sm text-slate-500 py-4">Недостатньо даних для графіка</div>;
+  }
+
+  const padding = 14;
+  const balances = points.map((p) => p.balance);
+  const lowers   = points.map((p) => p.lower ?? p.balance);
+  const uppers   = points.map((p) => p.upper ?? p.balance);
+
+  const allValues = [...balances, ...lowers, ...uppers];
+  const minY = Math.min(...allValues);
+  const maxY = Math.max(...allValues);
+  const span = maxY - minY || 1;
+
+  const toX = (i) => padding + (i * (width - padding * 2)) / Math.max(1, points.length - 1);
+  const toY = (y) => height - padding - ((y - minY) * (height - padding * 2)) / span;
+
+  const mainPath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.balance).toFixed(1)}`)
+    .join(" ");
+
+  const hasBands = points.some((p) => p.lower != null);
+  let bandPath = null;
+  if (hasBands) {
+    const upper = points.map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.upper ?? p.balance).toFixed(1)}`).join(" ");
+    const lower = [...points].reverse().map((p, i) => `${i === 0 ? "M" : "L"} ${toX(points.length - 1 - i).toFixed(1)} ${toY(p.lower ?? p.balance).toFixed(1)}`).join(" ");
+    bandPath = `${upper} ${lower} Z`;
+  }
+
+  const zeroY = toY(0);
+  const showZero = minY < 0 && maxY > 0;
+
+  const labels = points.map((p) => p.date ? new Date(p.date).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" }) : "");
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg width={width} height={height} className="block">
+        <rect x="0" y="0" width={width} height={height} fill="white" />
+        {[0, 1, 2, 3, 4].map((i) => {
+          const y = padding + (i * (height - padding * 2)) / 4;
+          return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
+        })}
+        {showZero && (
+          <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} stroke="#ef4444" strokeWidth="1" strokeDasharray="4 3" />
+        )}
+        {hasBands && (
+          <path d={bandPath} fill="#6366f1" fillOpacity="0.1" stroke="none" />
+        )}
+        <path d={mainPath} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinejoin="round" />
+        <text x={padding} y={padding - 2} fontSize="10" fill="#94a3b8">{maxY.toFixed(0)}</text>
+        <text x={padding} y={height - 2} fontSize="10" fill="#94a3b8">{minY.toFixed(0)}</text>
+      </svg>
+      <div className="flex justify-between text-xs text-slate-500 mt-1">
+        <span>{labels[0]}</span>
+        <span>{labels[Math.floor((labels.length - 1) / 2)]}</span>
+        <span>{labels[labels.length - 1]}</span>
+      </div>
+    </div>
+  );
+}
+
+function ForecastSection({ forecast, currency }) {
   if (!forecast) return <EmptyState text="Дані прогнозу ще не сформовано." />;
+
+  if (forecast.method === "insufficient") {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <MethodBadge method="insufficient" />
+        </div>
+        <p className="text-sm text-slate-600">{forecast.insufficientReason}</p>
+        {forecast.model && (
+          <div className="mt-4 flex gap-4 text-xs text-slate-500">
+            <span>Днів даних: <b>{forecast.model.dataSpanDays}</b></span>
+            <span>Транзакцій: <b>{forecast.model.dataPoints}</b></span>
+            <span>Потрібно: <b>≥ 30 дн. і ≥ 20 транз.</b></span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const m = forecast.model || {};
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
-      <Card title="Прогноз балансу" subtitle={`Горизонт: ${forecast.horizonDays || 0} днів`}>
-        <MiniSparkline points={forecast.seriesBalance || []} />
+      <Card
+        title="Прогноз балансу"
+        subtitle={`Горизонт: ${forecast.horizonDays || 0} днів`}
+        right={<MethodBadge method={forecast.method} />}
+      >
+        <ForecastChart points={forecast.seriesBalance || []} />
         {forecast.averageDailyNet != null ? (
           <div className="text-sm text-slate-600 mt-3">
-            Середній денний cash flow: <b>{formatMoney(forecast.averageDailyNet)}</b>
+            Середній денний cash flow:{" "}
+            <b className={forecast.averageDailyNet < 0 ? "text-red-600" : "text-emerald-700"}>
+              {formatMoney(forecast.averageDailyNet, currency)}
+            </b>
           </div>
         ) : null}
+        {(m.mae != null || m.mape != null) && (
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500 border-t border-slate-100 pt-3">
+            {m.mae  != null && <span>MAE: <b className="text-slate-700">{formatMoney(m.mae, currency)}</b></span>}
+            {m.mape != null && <span>MAPE: <b className="text-slate-700">{m.mape}%</b></span>}
+            <span>Дані: <b className="text-slate-700">{m.dataSpanDays} дн. / {m.dataPoints} транз.</b></span>
+            <ConfidenceBadge level={m.dataConfidence} />
+          </div>
+        )}
       </Card>
 
       <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
@@ -512,7 +639,7 @@ function ForecastSection({ forecast }) {
   );
 }
 
-function GoalsSection({ goals }) {
+function GoalsSection({ goals, currency }) {
   if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
 
   const g = goals.goal;
@@ -522,13 +649,13 @@ function GoalsSection({ goals }) {
     <div className="grid md:grid-cols-2 gap-4">
       <Card
         title={`Ціль: ${g.name}`}
-        subtitle={`Накопичено ${formatMoney(g.currentAmount)} з ${formatMoney(g.targetAmount)} · Дедлайн: ${formatDate(g.deadline)}`}
+        subtitle={`Накопичено ${formatMoney(g.currentAmount, currency)} з ${formatMoney(g.targetAmount, currency)} · Дедлайн: ${formatDate(g.deadline)}`}
         right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
       >
         <Gauge value={goals.probability} />
         {g.requiredMonthlySavings != null ? (
           <div className="mt-3 text-sm text-slate-600">
-            Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings)}</b>
+            Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b>
           </div>
         ) : null}
       </Card>
@@ -551,7 +678,7 @@ function GoalsSection({ goals }) {
                 </div>
                 {w.monthlySavings != null ? (
                   <div className="mt-2 text-xs text-slate-500">
-                    Щомісячні заощадження: {formatMoney(w.monthlySavings)}
+                    Щомісячні заощадження: {formatMoney(w.monthlySavings, currency)}
                   </div>
                 ) : null}
               </div>
@@ -571,7 +698,7 @@ function GoalsSection({ goals }) {
                 className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2"
               >
                 <span className="text-sm text-slate-800">{point.percentile}-й перцентиль</span>
-                <b className="text-sm">{formatMoney(point.amountByDeadline)}</b>
+                <b className="text-sm">{formatMoney(point.amountByDeadline, currency)}</b>
               </div>
             ))}
           </div>
@@ -581,7 +708,9 @@ function GoalsSection({ goals }) {
   );
 }
 
-function PatternsSection({ patterns }) {
+const MONETARY_STAT_KEYS = new Set(["totalAmount", "amount"]);
+
+function PatternsSection({ patterns, currency }) {
   if (!patterns.length) return <EmptyState text="Патерни витрат ще не сформовано." />;
 
   return (
@@ -595,7 +724,11 @@ function PatternsSection({ patterns }) {
             {cluster.stats ? (
               <div className="grid grid-cols-3 gap-2 mt-4">
                 {Object.entries(cluster.stats).map(([key, value]) => (
-                  <Metric key={key} label={key} value={String(value)} />
+                  <Metric
+                    key={key}
+                    label={key}
+                    value={MONETARY_STAT_KEYS.has(key) ? formatMoney(value, currency) : String(value)}
+                  />
                 ))}
               </div>
             ) : null}
@@ -625,6 +758,8 @@ export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState("recs");
   const [overviewPeriod, setOverviewPeriod] = useState("30d");
 
+  const [userCurrency, setUserCurrency] = useState("UAH");
+
   const [recommendations, setRecommendations] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -650,9 +785,10 @@ export default function RecommendationsPage() {
         Authorization: `Bearer ${token}`,
       };
 
-      const [recommendationsResponse, snapshotResponse] = await Promise.all([
+      const [recommendationsResponse, snapshotResponse, profileResponse] = await Promise.all([
         fetch(API_BASE_URL, { headers }),
         fetch(`${API_BASE_URL}/snapshot`, { headers }),
+        fetch(USER_API_URL, { headers }),
       ]);
 
       const recommendationsJson = await recommendationsResponse.json();
@@ -660,6 +796,11 @@ export default function RecommendationsPage() {
 
       if (!recommendationsResponse.ok) {
         throw new Error(recommendationsJson.message || "Не вдалося отримати рекомендації.");
+      }
+
+      if (profileResponse.ok) {
+        const profileJson = await profileResponse.json();
+        setUserCurrency(profileJson.currency || "UAH");
       }
 
       if (snapshotResponse.ok) {
@@ -862,12 +1003,13 @@ export default function RecommendationsPage() {
                 data={overview}
                 period={overviewPeriod}
                 onPeriodChange={setOverviewPeriod}
+                currency={userCurrency}
               />
             )}
-            {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} />}
-            {activeTab === "forecast" && <ForecastSection forecast={forecast} />}
-            {activeTab === "goals" && <GoalsSection goals={goals} />}
-            {activeTab === "patterns" && <PatternsSection patterns={patterns} />}
+            {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} currency={userCurrency} />}
+            {activeTab === "forecast" && <ForecastSection forecast={forecast} currency={userCurrency} />}
+            {activeTab === "goals" && <GoalsSection goals={goals} currency={userCurrency} />}
+            {activeTab === "patterns" && <PatternsSection patterns={patterns} currency={userCurrency} />}
           </div>
         )}
       </div>

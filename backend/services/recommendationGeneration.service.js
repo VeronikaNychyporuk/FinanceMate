@@ -1,6 +1,7 @@
 const Transaction = require("../models/Transaction");
 const Budget = require("../models/Budget");
 const Goal = require("../models/Goal");
+const User = require("../models/User");
 const Recommendation = require("../models/Recommendation");
 const RecommendationSnapshot = require("../models/RecommendationSnapshot");
 
@@ -10,6 +11,9 @@ const {
 const {
   analyzeAnomalies,
 } = require("./recommendations/algorithms/anomalyDetection");
+const {
+  buildForecast,
+} = require("./recommendations/algorithms/forecastEngine");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_TTL_HOURS = 24;
@@ -24,6 +28,18 @@ const PRIORITY_WEIGHT = {
   low: 1,
   medium: 2,
   high: 3,
+};
+
+const fmtAmount = (amount, currency = "UAH") => {
+  try {
+    return new Intl.NumberFormat("uk-UA", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(Number(amount || 0));
+  } catch {
+    return `${amount} ${currency}`;
+  }
 };
 
 const round = (value) => Number((value || 0).toFixed(2));
@@ -103,92 +119,6 @@ const groupExpenseByCategory = (transactions) => {
 
 
 
-const buildForecast = (transactions) => {
-  const last60Days = transactions.filter(
-    (tx) => tx.date >= buildDateRangeFilter(60).$gte
-  );
-
-  const today = startOfDay(new Date());
-  const horizonDays = 30;
-
-  const cashFlowByDay = new Map();
-
-  for (let i = 0; i < 60; i += 1) {
-    const day = addDays(today, -i);
-    cashFlowByDay.set(day.toISOString().slice(0, 10), 0);
-  }
-
-  last60Days.forEach((tx) => {
-    const key = startOfDay(tx.date).toISOString().slice(0, 10);
-    const current = cashFlowByDay.get(key) || 0;
-    const signedAmount =
-      tx.type === "income" ? tx.amountInBaseCurrency : -tx.amountInBaseCurrency;
-
-    cashFlowByDay.set(key, current + signedAmount);
-  });
-
-  const averageDailyNet = average([...cashFlowByDay.values()]);
-
-  const baseBalance = round(
-    last60Days.reduce((sum, tx) => {
-      return (
-        sum +
-        (tx.type === "income"
-          ? tx.amountInBaseCurrency
-          : -tx.amountInBaseCurrency)
-      );
-    }, 0)
-  );
-
-  const seriesBalance = [];
-  let runningBalance = baseBalance;
-
-  for (let i = 0; i < horizonDays; i += 1) {
-    const day = addDays(today, i);
-    runningBalance += averageDailyNet;
-
-    seriesBalance.push({
-      date: day.toISOString(),
-      balance: round(runningBalance),
-    });
-  }
-
-  const risks = [];
-  const minProjected = seriesBalance.reduce(
-    (min, point) => Math.min(min, point.balance),
-    Infinity
-  );
-
-  if (minProjected < 0) {
-    risks.push({
-      level: "high",
-      title: "Ймовірний дефіцит коштів",
-      message:
-        "За поточним фінансовим темпом прогнозується від’ємний залишок у межах 30 днів.",
-    });
-  } else if (averageDailyNet < 0) {
-    risks.push({
-      level: "medium",
-      title: "Негативний середній грошовий потік",
-      message:
-        "Середній добовий баланс зменшується, варто переглянути витрати найближчим часом.",
-    });
-  } else {
-    risks.push({
-      level: "low",
-      title: "Стабільний прогноз",
-      message:
-        "Поточна динаміка не сигналізує про критичні ризики в короткостроковому горизонті.",
-    });
-  }
-
-  return {
-    horizonDays,
-    averageDailyNet: round(averageDailyNet),
-    seriesBalance,
-    risks,
-  };
-};
 
 const buildGoalsAnalysis = (goals, transactions) => {
   const activeGoal = goals
@@ -423,6 +353,7 @@ const buildRecommendations = ({
   anomalyAnalysis,
   goalsAnalysis,
   patterns,
+  currency,
 }) => {
   const recommendations = [];
 
@@ -447,10 +378,10 @@ const buildRecommendations = ({
           groupKey: "immediate_actions",
           groupLabel: GROUP_LABELS.immediate_actions,
           title: "Виявлено нетипову витрату",
-          message: `Система зафіксувала нетипову операцію в категорії «${actionableAnomaly.category}» на суму ${actionableAnomaly.amount}. Рекомендується перевірити цю транзакцію.`,
+          message: `Система зафіксувала нетипову операцію в категорії «${actionableAnomaly.category}» на суму ${fmtAmount(actionableAnomaly.amount, currency)}. Рекомендується перевірити цю транзакцію.`,
           facts: [
             `Категорія: ${actionableAnomaly.category}`,
-            `Сума: ${actionableAnomaly.amount}`,
+            `Сума: ${fmtAmount(actionableAnomaly.amount, currency)}`,
             `Anomaly score: ${actionableAnomaly.anomalyScore}/100`,
             `Рівень: ${actionableAnomaly.severity}`,
           ],
@@ -495,7 +426,7 @@ const buildRecommendations = ({
         message: `За поточного темпу накопичення ймовірність досягнення цілі до дедлайну становить близько ${goalsAnalysis.probability}%.`,
         facts: [
           `Ціль: ${goalsAnalysis.goal.name}`,
-          `Потрібно щомісяця: ${goalsAnalysis.goal.requiredMonthlySavings}`,
+          `Потрібно щомісяця: ${fmtAmount(goalsAnalysis.goal.requiredMonthlySavings, currency)}`,
           `Ймовірність: ${goalsAnalysis.probability}%`,
         ],
         explanation:
@@ -540,7 +471,7 @@ const buildRecommendations = ({
           "Часті невеликі покупки формують помітну частину витрат. Їх варто переглянути окремо як поведінковий патерн.",
         facts: [
           `Кількість операцій: ${regularSmallCluster.stats.transactions}`,
-          `Сума: ${regularSmallCluster.stats.totalAmount}`,
+          `Сума: ${fmtAmount(regularSmallCluster.stats.totalAmount, currency)}`,
         ],
         explanation: regularSmallCluster.recommendation,
         primaryAction: {
@@ -630,6 +561,9 @@ const archiveCurrentRecommendations = async (userId) => {
 exports.generateRecommendationsForUser = async (userId) => {
   const now = new Date();
 
+  const user = await User.findById(userId).select("currency");
+  const currency = user?.currency || "UAH";
+
   const transactions = await Transaction.find({
     userId,
     date: { $gte: addDays(startOfDay(now), -180) },
@@ -676,6 +610,7 @@ exports.generateRecommendationsForUser = async (userId) => {
     anomalyAnalysis,
     goalsAnalysis,
     patterns,
+    currency,
   });
 
   const createdRecommendations = recommendationPayload.length
