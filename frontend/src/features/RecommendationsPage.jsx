@@ -22,26 +22,21 @@ function cn(...classes) {
 }
 
 function formatMoney(amount, currency = "UAH") {
-  const numericAmount = Number(amount || 0);
-
   try {
     return new Intl.NumberFormat("uk-UA", {
       style: "currency",
       currency,
       maximumFractionDigits: 0,
-    }).format(numericAmount);
-  } catch (error) {
-    return `${numericAmount} ${currency}`;
+    }).format(Number(amount || 0));
+  } catch {
+    return `${amount} ${currency}`;
   }
 }
 
 function formatDate(dateValue, withTime = false) {
   if (!dateValue) return "—";
-
   const date = new Date(dateValue);
-
   if (Number.isNaN(date.getTime())) return "—";
-
   if (withTime) {
     return date.toLocaleString("uk-UA", {
       year: "numeric",
@@ -51,7 +46,6 @@ function formatDate(dateValue, withTime = false) {
       minute: "2-digit",
     });
   }
-
   return date.toLocaleDateString("uk-UA");
 }
 
@@ -71,241 +65,247 @@ function getSeverityLabel(value) {
 
 function getModuleLabel(value) {
   switch (value) {
-    case "overview":
-      return "Огляд";
-    case "anomalies":
-      return "Аномалії";
-    case "forecast":
-      return "Прогноз";
-    case "goals":
-      return "Цілі";
-    case "patterns":
-      return "Поведінка";
-    default:
-      return value || "—";
+    case "overview": return "Огляд";
+    case "anomalies": return "Аномалії";
+    case "forecast": return "Прогноз";
+    case "goals": return "Цілі";
+    case "patterns": return "Поведінка";
+    default: return value || "—";
   }
+}
+
+/* ============ UI Primitives ============ */
+
+function Card({ title, subtitle, right, children }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-slate-900">{title}</div>
+          {subtitle ? <div className="text-sm text-slate-600 mt-0.5">{subtitle}</div> : null}
+        </div>
+        {right ? <div className="shrink-0">{right}</div> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
+function PrimaryButton({ children, onClick, disabled }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 active:bg-slate-950 disabled:opacity-60"
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function GhostButton({ children, onClick, disabled }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="px-3 py-2 rounded-lg border border-slate-200 text-slate-900 text-sm hover:bg-slate-50 active:bg-slate-100 disabled:opacity-60"
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
+function Segmented({ options, value, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={cn(
+            "px-3 py-1.5 text-sm rounded-md",
+            value === o.key ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SeverityPill({ severity }) {
+  const map = {
+    low: { label: "Низька", cls: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+    medium: { label: "Середня", cls: "bg-amber-100 text-amber-800 border-amber-200" },
+    high: { label: "Висока", cls: "bg-rose-100 text-rose-800 border-rose-200" },
+    critical: { label: "Висока", cls: "bg-rose-100 text-rose-800 border-rose-200" },
+  };
+  const s = map[String(severity || "").toLowerCase()] ?? map.low;
+  return (
+    <span className={cn("inline-flex items-center px-2 py-1 text-xs border rounded-full", s.cls)}>
+      {s.label}
+    </span>
+  );
+}
+
+function ModulePill({ moduleKey }) {
+  return (
+    <span className="inline-flex items-center px-2 py-1 text-xs border rounded-full bg-slate-50 text-slate-700">
+      {getModuleLabel(moduleKey)}
+    </span>
+  );
+}
+
+function Gauge({ value }) {
+  const pct = Math.max(0, Math.min(100, Number(value || 0)));
+  return (
+    <div className="w-full">
+      <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <span>0%</span>
+        <span>100%</span>
+      </div>
+      <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+        <div className="h-full bg-slate-900" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="text-sm mt-2">
+        Ймовірність: <b>{pct.toFixed(0)}%</b>
+      </div>
+    </div>
+  );
+}
+
+function MiniSparkline({ points, width = 520, height = 140 }) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return (
+      <div className="text-sm text-slate-500 py-4">Недостатньо даних для графіка</div>
+    );
+  }
+
+  const padding = 12;
+  const w = width;
+  const h = height;
+  const ys = points.map((p) => Number(p.y ?? p.balance ?? 0));
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const span = maxY - minY || 1;
+
+  const toX = (i) => padding + (i * (w - padding * 2)) / Math.max(1, points.length - 1);
+  const toY = (y) => h - padding - ((y - minY) * (h - padding * 2)) / span;
+
+  const d = points
+    .map((p, i) => {
+      const y = Number(p.y ?? p.balance ?? 0);
+      return `${i === 0 ? "M" : "L"} ${toX(i).toFixed(2)} ${toY(y).toFixed(2)}`;
+    })
+    .join(" ");
+
+  const xLabels = points.map((p) => p.xLabel || p.date || "");
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg width={w} height={h} className="block">
+        <rect x="0" y="0" width={w} height={h} fill="white" />
+        {[0, 1, 2, 3, 4].map((i) => {
+          const y = padding + (i * (h - padding * 2)) / 4;
+          return <line key={i} x1={padding} y1={y} x2={w - padding} y2={y} stroke="#e2e8f0" />;
+        })}
+        <path d={d} fill="none" stroke="#0f172a" strokeWidth="2.5" />
+        {points.map((p, i) => {
+          const y = Number(p.y ?? p.balance ?? 0);
+          return <circle key={i} cx={toX(i)} cy={toY(y)} r="3.5" fill="#0f172a" />;
+        })}
+        <text x={padding} y={padding - 2} fontSize="11" fill="#64748b">
+          max {maxY.toFixed(0)}
+        </text>
+        <text x={padding} y={h - 2} fontSize="11" fill="#64748b">
+          min {minY.toFixed(0)}
+        </text>
+      </svg>
+      <div className="flex justify-between text-xs text-slate-500 mt-2">
+        <span>{xLabels[0]}</span>
+        <span>{xLabels[Math.floor((xLabels.length - 1) / 2)]}</span>
+        <span>{xLabels[xLabels.length - 1]}</span>
+      </div>
+    </div>
+  );
 }
 
 function EmptyState({ text }) {
   return (
-    <div className="rounded-[24px] border border-[#d7dde7] bg-white px-8 py-10 text-[16px] text-[#64748b]">
+    <div className="bg-white border border-slate-200 rounded-xl px-8 py-10 text-sm text-slate-500">
       {text}
     </div>
   );
 }
 
-function Pill({ children, tone = "neutral" }) {
-  const toneClasses = {
-    neutral: "border-[#d7dde7] bg-[#f8fafc] text-[#475569]",
-    severityHigh: "border-[#f3c9d0] bg-[#fdecef] text-[#c24155]",
-    severityMedium: "border-[#f0dfab] bg-[#fff6dc] text-[#b7791f]",
-    severityLow: "border-[#cfe5d5] bg-[#edf8f0] text-[#2f855a]",
-  };
-
+function Metric({ label, value }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-3 py-[6px] text-[14px] leading-none",
-        toneClasses[tone] || toneClasses.neutral
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-function StatCard({ title, value, subtitle }) {
-  return (
-    <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-      <div className="text-[14px] text-[#64748b]">{title}</div>
-      <div className="mt-2 text-[28px] font-semibold leading-none text-[#0f172a]">
-        {value}
-      </div>
-      {subtitle ? (
-        <div className="mt-2 text-[13px] text-[#94a3b8]">{subtitle}</div>
-      ) : null}
+    <div className="border border-slate-200 rounded-lg p-2">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-sm font-semibold">{value}</div>
     </div>
   );
 }
 
-function Gauge({ value }) {
-  const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+/* ============ Recommendation Components ============ */
 
+function RecommendationCard({ recommendation, onDismiss, onSnooze, onDone, actionLoading }) {
   return (
-    <div className="w-full">
-      <div className="mb-2 flex items-center justify-between text-[14px]">
-        <span className="text-[#64748b]">Ймовірність</span>
-        <span className="font-medium text-[#0f172a]">{safeValue}%</span>
-      </div>
-      <div className="h-[10px] w-full rounded-full bg-[#e8edf5]">
-        <div
-          className="h-full rounded-full bg-[#08152f]"
-          style={{ width: `${safeValue}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MiniSparkline({ points }) {
-  if (!Array.isArray(points) || points.length === 0) {
-    return (
-      <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6 text-[14px] text-[#94a3b8]">
-        Недостатньо даних для графіка
-      </div>
-    );
-  }
-
-  const values = points.map((point) => Number(point.balance || 0));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const width = 900;
-  const height = 220;
-
-  const normalizeX = (index) =>
-    points.length === 1 ? 0 : (index / (points.length - 1)) * width;
-
-  const normalizeY = (value) => {
-    if (max === min) return height / 2;
-    return height - ((value - min) / (max - min)) * height;
-  };
-
-  const path = points
-    .map((point, index) => {
-      const x = normalizeX(index);
-      const y = normalizeY(Number(point.balance || 0));
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-
-  return (
-    <div className="rounded-[22px] border border-[#d7dde7] bg-white p-5">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[220px] w-full"
-        preserveAspectRatio="none"
-      >
-        <path
-          d={path}
-          fill="none"
-          stroke="#08152f"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
-  );
-}
-
-function RecommendationCard({
-  recommendation,
-  onDismiss,
-  onSnooze,
-  onDone,
-  actionLoading,
-}) {
-  const severityTone =
-    recommendation.priority === "high" || recommendation.priority === "critical"
-      ? "severityHigh"
-      : recommendation.priority === "medium"
-      ? "severityMedium"
-      : "severityLow";
-
-  const primaryLabel =
-    recommendation.primaryAction?.label || "Переглянути";
-  const secondaryLabel =
-    recommendation.secondaryAction?.label || "Докази";
-
-  return (
-    <div className="rounded-[22px] border border-[#d7dde7] bg-white px-7 py-7">
-      <div className="flex items-start justify-between gap-6">
+    <div className="border border-slate-200 rounded-xl p-4 bg-white">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Pill tone="neutral">{getModuleLabel(recommendation.module)}</Pill>
-            <Pill tone={severityTone}>
-              {getSeverityLabel(recommendation.priority)}
-            </Pill>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-sm font-semibold text-slate-900">{recommendation.title}</div>
+            <ModulePill moduleKey={recommendation.module} />
+            <SeverityPill severity={recommendation.priority} />
           </div>
 
-          <h3 className="mb-3 text-[18px] font-semibold leading-[1.35] text-[#0f172a]">
-            {recommendation.title}
-          </h3>
-
-          <p className="mb-4 max-w-[860px] text-[16px] leading-[1.6] text-[#475569]">
-            {recommendation.message}
-          </p>
+          <div className="text-sm text-slate-600 mt-1">{recommendation.message}</div>
 
           {Array.isArray(recommendation.facts) && recommendation.facts.length > 0 ? (
-            <div className="mb-6 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mt-3">
               {recommendation.facts.map((fact, index) => (
-                <Pill key={`${recommendation._id}-fact-${index}`}>{fact}</Pill>
+                <span
+                  key={`${recommendation._id}-fact-${index}`}
+                  className="px-2 py-1 text-xs border rounded-full bg-slate-50 text-slate-700"
+                >
+                  {fact}
+                </span>
               ))}
             </div>
           ) : null}
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => onDismiss(recommendation._id)}
-              disabled={actionLoading}
-              className="rounded-[14px] border border-[#d7dde7] bg-white px-6 py-3 text-[15px] font-medium text-[#0f172a] transition hover:bg-[#f8fafc] disabled:opacity-60"
-            >
-              Відхилити
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onSnooze(recommendation._id)}
-              disabled={actionLoading}
-              className="rounded-[14px] border border-[#d7dde7] bg-white px-6 py-3 text-[15px] font-medium text-[#0f172a] transition hover:bg-[#f8fafc] disabled:opacity-60"
-            >
-              Відкласти
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onDone(recommendation._id)}
-              disabled={actionLoading}
-              className="rounded-[14px] border border-[#d7dde7] bg-white px-6 py-3 text-[15px] font-medium text-[#0f172a] transition hover:bg-[#f8fafc] disabled:opacity-60"
-            >
-              Виконано
-            </button>
-          </div>
         </div>
 
-        <div className="flex w-[190px] shrink-0 flex-col gap-3">
-          <button
-            type="button"
-            className="rounded-[14px] bg-[#08152f] px-6 py-3 text-[15px] font-medium text-white"
-          >
-            {primaryLabel}
-          </button>
-
-          <button
-            type="button"
-            className="rounded-[14px] border border-[#d7dde7] bg-white px-6 py-3 text-[15px] font-medium text-[#0f172a]"
-          >
-            {secondaryLabel}
-          </button>
+        <div className="flex flex-col gap-2 shrink-0">
+          <PrimaryButton>{recommendation.primaryAction?.label || "Переглянути"}</PrimaryButton>
+          <GhostButton>{recommendation.secondaryAction?.label || "Докази"}</GhostButton>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <GhostButton onClick={() => onDismiss(recommendation._id)} disabled={actionLoading}>
+          Відхилити
+        </GhostButton>
+        <GhostButton onClick={() => onSnooze(recommendation._id)} disabled={actionLoading}>
+          Відкласти
+        </GhostButton>
+        <GhostButton onClick={() => onDone(recommendation._id)} disabled={actionLoading}>
+          Виконано
+        </GhostButton>
       </div>
     </div>
   );
 }
 
-function RecommendationGroup({
-  title,
-  items,
-  onDismiss,
-  onSnooze,
-  onDone,
-  actionLoadingId,
-}) {
+function RecommendationGroup({ title, items, onDismiss, onSnooze, onDone, actionLoadingId }) {
   return (
-    <div className="rounded-[26px] border border-[#d7dde7] bg-white p-7">
-      <h3 className="mb-6 text-[18px] font-semibold text-[#0f172a]">{title}</h3>
-
-      <div className="space-y-5">
+    <div className="border border-slate-200 rounded-xl p-4">
+      <div className="text-sm font-semibold text-slate-900">{title}</div>
+      <div className="mt-3 grid gap-3">
         {items.map((item) => (
           <RecommendationCard
             key={item._id}
@@ -321,13 +321,312 @@ function RecommendationGroup({
   );
 }
 
+/* ============ Tab Sections ============ */
+
+function RecommendationsSection({ groupList, onDismiss, onSnooze, onDone, actionLoadingId }) {
+  return (
+    <Card
+      title="Усі рекомендації"
+      subtitle="Головна сторінка: короткі повідомлення + переходи до пояснень/візуалізацій"
+      right={<span className="text-sm text-slate-500">Груп: {groupList.length}</span>}
+    >
+      {groupList.length > 0 ? (
+        <div className="grid gap-4">
+          {groupList.map((group, index) => (
+            <RecommendationGroup
+              key={`${group.title}-${index}`}
+              title={group.title}
+              items={group.items}
+              onDismiss={onDismiss}
+              onSnooze={onSnooze}
+              onDone={onDone}
+              actionLoadingId={actionLoadingId}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-slate-500">Активні рекомендації відсутні.</div>
+      )}
+    </Card>
+  );
+}
+
+function OverviewSection({ data, period, onPeriodChange }) {
+  if (!data) return <EmptyState text="Snapshot для огляду ще не сформовано." />;
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-lg font-semibold text-slate-900">Огляд</div>
+        <Segmented options={OVERVIEW_PERIODS} value={period} onChange={onPeriodChange} />
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card title="Доходи" subtitle="Сума за період">
+          <div className="text-2xl font-bold">{formatMoney(data.income)}</div>
+        </Card>
+        <Card title="Витрати" subtitle="Сума за період">
+          <div className="text-2xl font-bold">{formatMoney(data.expense)}</div>
+        </Card>
+        <Card title="Чистий результат" subtitle="Доходи − витрати">
+          <div className="text-2xl font-bold">{formatMoney(data.net)}</div>
+        </Card>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card title="Основні драйвери витрат" subtitle="Категорії з найбільшими сумами">
+          {data.topDrivers?.length ? (
+            <div className="grid gap-2">
+              {data.topDrivers.map((d, index) => (
+                <div
+                  key={`${d.category || d.name}-${index}`}
+                  className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2"
+                >
+                  <div>
+                    <span className="text-sm text-slate-800">{d.category || d.name}</span>
+                    {d.share != null ? (
+                      <span className="ml-2 text-xs text-slate-500">({d.share}%)</span>
+                    ) : null}
+                  </div>
+                  <b className="text-sm">{formatMoney(d.amount)}</b>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">Немає даних.</div>
+          )}
+        </Card>
+
+        <Card title="Ключові спостереження" subtitle="Швидкі висновки для обраного періоду">
+          {data.highlights?.length ? (
+            <div className="grid gap-2">
+              {data.highlights.map((h, i) => (
+                <div
+                  key={i}
+                  className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3"
+                >
+                  <div className="text-sm text-slate-800">
+                    {typeof h === "string" ? h : h.text}
+                  </div>
+                  {h.severity ? <SeverityPill severity={h.severity} /> : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">Немає даних.</div>
+          )}
+        </Card>
+      </div>
+    </>
+  );
+}
+
+function AnomaliesSection({ anomalies }) {
+  if (!anomalies.length) return <EmptyState text="Аномалій не виявлено." />;
+
+  return (
+    <Card
+      title="Аномалії у витратах"
+      subtitle="Підозрілі або нетипові транзакції з поясненнями"
+      right={<span className="text-sm text-slate-500">Відкриті: {anomalies.length}</span>}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-slate-500">
+            <tr>
+              <th className="py-2 pr-3">Дата</th>
+              <th className="py-2 pr-3">Категорія</th>
+              <th className="py-2 pr-3">Мерчант</th>
+              <th className="py-2 pr-3">Сума</th>
+              <th className="py-2 pr-3">Причини</th>
+            </tr>
+          </thead>
+          <tbody>
+            {anomalies.map((anomaly, index) => (
+              <tr key={anomaly.transactionId || index} className="border-t border-slate-200">
+                <td className="py-3 pr-3">{formatDate(anomaly.date)}</td>
+                <td className="py-3 pr-3">{anomaly.category || "—"}</td>
+                <td className="py-3 pr-3">{anomaly.merchant || "Без назви"}</td>
+                <td className="py-3 pr-3 font-semibold">{formatMoney(anomaly.amount)}</td>
+                <td className="py-3 pr-3">
+                  <div className="flex flex-wrap gap-2">
+                    <SeverityPill severity={anomaly.severity} />
+                    {(anomaly.reasons || []).slice(0, 2).map((r, i) => (
+                      <span key={i} className="px-2 py-1 text-xs border rounded-full bg-slate-50">
+                        {r}
+                      </span>
+                    ))}
+                    {(anomaly.reasons || []).length > 2 ? (
+                      <span className="px-2 py-1 text-xs border rounded-full bg-slate-50">
+                        +{anomaly.reasons.length - 2}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function ForecastSection({ forecast }) {
+  if (!forecast) return <EmptyState text="Дані прогнозу ще не сформовано." />;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card title="Прогноз балансу" subtitle={`Горизонт: ${forecast.horizonDays || 0} днів`}>
+        <MiniSparkline points={forecast.seriesBalance || []} />
+        {forecast.averageDailyNet != null ? (
+          <div className="text-sm text-slate-600 mt-3">
+            Середній денний cash flow: <b>{formatMoney(forecast.averageDailyNet)}</b>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
+        {(forecast.risks || []).length ? (
+          <div className="grid gap-2">
+            {forecast.risks.map((r, i) => (
+              <div
+                key={i}
+                className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3"
+              >
+                <div>
+                  {r.title ? (
+                    <div className="text-sm font-semibold text-slate-900">{r.title}</div>
+                  ) : null}
+                  <div className="text-sm text-slate-800 mt-0.5">{r.message}</div>
+                </div>
+                <SeverityPill severity={r.level} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">Ризики відсутні.</div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function GoalsSection({ goals }) {
+  if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
+
+  const g = goals.goal;
+  const progressPct = Math.round(((g.currentAmount || 0) / (g.targetAmount || 1)) * 100);
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      <Card
+        title={`Ціль: ${g.name}`}
+        subtitle={`Накопичено ${formatMoney(g.currentAmount)} з ${formatMoney(g.targetAmount)} · Дедлайн: ${formatDate(g.deadline)}`}
+        right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
+      >
+        <Gauge value={goals.probability} />
+        {g.requiredMonthlySavings != null ? (
+          <div className="mt-3 text-sm text-slate-600">
+            Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings)}</b>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card title="What-if сценарії" subtitle="Як зміниться ймовірність при різних діях">
+        {goals.whatIf?.length ? (
+          <div className="grid gap-2">
+            {goals.whatIf.map((w, i) => (
+              <div key={i} className="border border-slate-200 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">{w.scenario || w.label}</div>
+                  <div className="text-sm">
+                    <b>{w.probability}%</b>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-slate-900" style={{ width: `${w.probability}%` }} />
+                  </div>
+                </div>
+                {w.monthlySavings != null ? (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Щомісячні заощадження: {formatMoney(w.monthlySavings)}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">Сценарії відсутні.</div>
+        )}
+      </Card>
+
+      {goals.distribution?.length ? (
+        <Card title="Розподіл результатів" subtitle="Перцентилі по сумі до дедлайну">
+          <div className="grid gap-2">
+            {goals.distribution.map((point, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2"
+              >
+                <span className="text-sm text-slate-800">{point.percentile}-й перцентиль</span>
+                <b className="text-sm">{formatMoney(point.amountByDeadline)}</b>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function PatternsSection({ patterns }) {
+  if (!patterns.length) return <EmptyState text="Патерни витрат ще не сформовано." />;
+
+  return (
+    <Card title="Кластери поведінки витрат" subtitle="Сегменти, що описують типові патерни">
+      <div className="grid md:grid-cols-2 gap-4">
+        {patterns.map((cluster, index) => (
+          <div key={index} className="border border-slate-200 rounded-xl p-4">
+            <div className="text-base font-semibold">{cluster.label}</div>
+            <div className="text-sm text-slate-600 mt-1">{cluster.description}</div>
+
+            {cluster.stats ? (
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {Object.entries(cluster.stats).map(([key, value]) => (
+                  <Metric key={key} label={key} value={String(value)} />
+                ))}
+              </div>
+            ) : null}
+
+            {cluster.top?.length ? (
+              <div className="text-sm text-slate-700 mt-4">
+                <b>Топ:</b> {cluster.top.join(", ")}
+              </div>
+            ) : null}
+
+            {cluster.recommendation ? (
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <div className="text-sm font-semibold">Рекомендація</div>
+                <div className="text-sm text-slate-600 mt-1">{cluster.recommendation}</div>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/* ============ Main Page ============ */
+
 export default function RecommendationsPage() {
   const [activeTab, setActiveTab] = useState("recs");
   const [overviewPeriod, setOverviewPeriod] = useState("30d");
 
   const [recommendations, setRecommendations] = useState([]);
   const [snapshot, setSnapshot] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [recalculateLoading, setRecalculateLoading] = useState(false);
@@ -344,10 +643,7 @@ export default function RecommendationsPage() {
       setError("");
 
       const token = getToken();
-
-      if (!token) {
-        throw new Error("Не знайдено токен авторизації.");
-      }
+      if (!token) throw new Error("Не знайдено токен авторизації.");
 
       const headers = {
         "Content-Type": "application/json",
@@ -363,9 +659,7 @@ export default function RecommendationsPage() {
       const snapshotJson = await snapshotResponse.json();
 
       if (!recommendationsResponse.ok) {
-        throw new Error(
-          recommendationsJson.message || "Не вдалося отримати рекомендації."
-        );
+        throw new Error(recommendationsJson.message || "Не вдалося отримати рекомендації.");
       }
 
       if (snapshotResponse.ok) {
@@ -410,10 +704,7 @@ export default function RecommendationsPage() {
       });
 
       const json = await response.json();
-
-      if (!response.ok) {
-        throw new Error(json.message || "Не вдалося оновити статус.");
-      }
+      if (!response.ok) throw new Error(json.message || "Не вдалося оновити статус.");
 
       await loadData();
     } catch (err) {
@@ -444,10 +735,7 @@ export default function RecommendationsPage() {
       });
 
       const json = await response.json();
-
-      if (!response.ok) {
-        throw new Error(json.message || "Не вдалося відкласти рекомендацію.");
-      }
+      if (!response.ok) throw new Error(json.message || "Не вдалося відкласти рекомендацію.");
 
       await loadData();
     } catch (err) {
@@ -474,10 +762,7 @@ export default function RecommendationsPage() {
       });
 
       const json = await response.json();
-
-      if (!response.ok) {
-        throw new Error(json.message || "Не вдалося перерахувати рекомендації.");
-      }
+      if (!response.ok) throw new Error(json.message || "Не вдалося перерахувати рекомендації.");
 
       await loadData();
     } catch (err) {
@@ -490,10 +775,7 @@ export default function RecommendationsPage() {
   const groupedRecommendations = recommendations.reduce((acc, item) => {
     const key = item.groupKey || "other";
     if (!acc[key]) {
-      acc[key] = {
-        title: item.groupLabel || "Інше",
-        items: [],
-      };
+      acc[key] = { title: item.groupLabel || "Інше", items: [] };
     }
     acc[key].items.push(item);
     return acc;
@@ -508,454 +790,85 @@ export default function RecommendationsPage() {
   const patterns = snapshot?.data?.patterns?.clusters || [];
 
   return (
-    <div className="min-h-screen px-8 py-8">
-      <div className="mx-auto max-w-[1300px]">
-        <div className="mb-8 flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-[28px] font-semibold leading-none text-[#0f172a]">
-              Центр рекомендацій
-            </h1>
-            <div className="mt-3 text-[16px] text-[#475569]">
-              Згенеровано: {snapshot?.generatedAt ? formatDate(snapshot.generatedAt, true) : "—"}
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <div className="text-2xl font-bold text-slate-900">Центр рекомендацій</div>
+            <div className="text-sm text-slate-600">
+              Згенеровано:{" "}
+              {snapshot?.generatedAt ? formatDate(snapshot.generatedAt, true) : "—"}
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={recalculateRecommendations}
-              disabled={recalculateLoading}
-              className="rounded-[14px] bg-[#08152f] px-6 py-3 text-[15px] font-medium text-white disabled:opacity-60"
-            >
+          <div className="flex items-center gap-2">
+            <GhostButton onClick={loadData} disabled={loading}>
+              Оновити дані
+            </GhostButton>
+            <PrimaryButton onClick={recalculateRecommendations} disabled={recalculateLoading}>
               {recalculateLoading ? "Перерахунок..." : "Перерахувати"}
+            </PrimaryButton>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="mt-6 bg-white border border-slate-200 rounded-xl p-2 flex flex-wrap gap-2">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              type="button"
+              className={cn(
+                "px-3 py-2 rounded-lg text-sm",
+                activeTab === tab.key
+                  ? "bg-slate-900 text-white"
+                  : "hover:bg-slate-100 text-slate-800"
+              )}
+            >
+              {tab.label}
             </button>
-          </div>
+          ))}
         </div>
 
-        <div className="mb-8 rounded-[22px] border border-[#d7dde7] bg-white px-3 py-3 inline-flex items-center text-xs border bg-slate-50 text-slate-700 min-w-[1100px]">
-          <div className="flex flex-wrap gap-2">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={cn(
-                  "rounded-[14px] px-4 py-3 text-[14px] font-medium transition",
-                  activeTab === tab.key
-                    ? "bg-[#08152f] text-white"
-                    : "text-[#0f172a] hover:bg-[#f8fafc]"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
+        {/* Error */}
         {error ? (
-          <div className="mb-6 rounded-[20px] border border-[#f3c9d0] bg-[#fdecef] px-5 py-4 text-[15px] text-[#c24155]">
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         ) : null}
 
+        {/* Loading */}
         {loading ? (
-          <div className="rounded-[24px] border border-[#d7dde7] bg-white px-8 py-10 text-[16px] text-[#64748b]">
+          <div className="mt-6 bg-white border border-slate-200 rounded-xl px-8 py-10 text-sm text-slate-500">
             Завантаження даних...
           </div>
         ) : null}
 
-        {!loading && activeTab === "recs" && (
-          <div className="rounded-[26px] border border-[#d7dde7] bg-white p-7">
-            <div className="mb-8 flex items-start justify-between gap-6">
-              <div>
-                <h2 className="text-[18px] font-semibold text-[#0f172a]">
-                  Усі рекомендації
-                </h2>
-              </div>
-
-              <div className="text-[16px] text-[#64748b]">
-                Груп: {groupList.length}
-              </div>
-            </div>
-
-            {groupList.length > 0 ? (
-              <div className="space-y-8">
-                {groupList.map((group, index) => (
-                  <RecommendationGroup
-                    key={`${group.title}-${index}`}
-                    title={group.title}
-                    items={group.items}
-                    onDismiss={(id) => updateRecommendationStatus(id, "dismissed")}
-                    onSnooze={snoozeRecommendation}
-                    onDone={(id) => updateRecommendationStatus(id, "done")}
-                    actionLoadingId={actionLoadingId}
-                  />
-                ))}
-              </div>
-            ) : (
-              <EmptyState text="Активні рекомендації відсутні." />
+        {/* Content */}
+        {!loading && (
+          <div className="mt-6 grid gap-4">
+            {activeTab === "recs" && (
+              <RecommendationsSection
+                groupList={groupList}
+                onDismiss={(id) => updateRecommendationStatus(id, "dismissed")}
+                onSnooze={snoozeRecommendation}
+                onDone={(id) => updateRecommendationStatus(id, "done")}
+                actionLoadingId={actionLoadingId}
+              />
             )}
+            {activeTab === "overview" && (
+              <OverviewSection
+                data={overview}
+                period={overviewPeriod}
+                onPeriodChange={setOverviewPeriod}
+              />
+            )}
+            {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} />}
+            {activeTab === "forecast" && <ForecastSection forecast={forecast} />}
+            {activeTab === "goals" && <GoalsSection goals={goals} />}
+            {activeTab === "patterns" && <PatternsSection patterns={patterns} />}
           </div>
-        )}
-
-        {!loading && activeTab === "overview" && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap gap-3">
-              {OVERVIEW_PERIODS.map((period) => (
-                <button
-                  key={period.key}
-                  type="button"
-                  onClick={() => setOverviewPeriod(period.key)}
-                  className={cn(
-                    "rounded-[14px] border px-5 py-3 text-[15px] font-medium transition",
-                    overviewPeriod === period.key
-                      ? "border-[#08152f] bg-[#08152f] text-white"
-                      : "border-[#d7dde7] bg-white text-[#0f172a]"
-                  )}
-                >
-                  {period.label}
-                </button>
-              ))}
-            </div>
-
-            {overview ? (
-              <>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <StatCard title="Доходи" value={formatMoney(overview.income)} />
-                  <StatCard title="Витрати" value={formatMoney(overview.expense)} />
-                  <StatCard title="Баланс" value={formatMoney(overview.net)} />
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-                    <h3 className="mb-4 text-[18px] font-semibold text-[#0f172a]">
-                      Основні драйвери витрат
-                    </h3>
-
-                    {overview.topDrivers?.length ? (
-                      <div className="space-y-3">
-                        {overview.topDrivers.map((driver, index) => (
-                          <div
-                            key={`${driver.category}-${index}`}
-                            className="flex items-center justify-between rounded-[16px] bg-[#f8fafc] px-4 py-4"
-                          >
-                            <div>
-                              <div className="font-medium text-[#0f172a]">
-                                {driver.category}
-                              </div>
-                              <div className="mt-1 text-[14px] text-[#64748b]">
-                                Частка: {driver.share}%
-                              </div>
-                            </div>
-                            <div className="font-medium text-[#0f172a]">
-                              {formatMoney(driver.amount)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[15px] text-[#64748b]">Немає даних.</div>
-                    )}
-                  </div>
-
-                  <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-                    <h3 className="mb-4 text-[18px] font-semibold text-[#0f172a]">
-                      Highlights
-                    </h3>
-
-                    {overview.highlights?.length ? (
-                      <div className="space-y-3">
-                        {overview.highlights.map((item, index) => (
-                          <div
-                            key={index}
-                            className="rounded-[16px] bg-[#f8fafc] px-4 py-4 text-[15px] text-[#475569]"
-                          >
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[15px] text-[#64748b]">Немає даних.</div>
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <EmptyState text="Snapshot для огляду ще не сформовано." />
-            )}
-          </div>
-        )}
-
-        {!loading && activeTab === "anomalies" && (
-          <>
-            {anomalies.length > 0 ? (
-              <div className="space-y-4">
-                {anomalies.map((anomaly, index) => (
-                  <div
-                    key={anomaly.transactionId || index}
-                    className="rounded-[22px] border border-[#d7dde7] bg-white p-6"
-                  >
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div>
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          <Pill tone="neutral">Аномалії</Pill>
-                          <Pill
-                            tone={
-                              anomaly.severity === "high"
-                                ? "severityHigh"
-                                : "severityMedium"
-                            }
-                          >
-                            {getSeverityLabel(anomaly.severity)}
-                          </Pill>
-                        </div>
-
-                        <h3 className="text-[18px] font-semibold text-[#0f172a]">
-                          {anomaly.category || "Аномальна транзакція"}
-                        </h3>
-                      </div>
-
-                      <div className="text-[14px] text-[#94a3b8]">
-                        {formatDate(anomaly.date)}
-                      </div>
-                    </div>
-
-                    <div className="mb-3 text-[18px] font-medium text-[#0f172a]">
-                      {formatMoney(anomaly.amount)}
-                    </div>
-
-                    <div className="mb-4 text-[15px] text-[#64748b]">
-                      {anomaly.merchant || "Без назви"}
-                    </div>
-
-                    {anomaly.reasons?.length ? (
-                      <div className="space-y-2">
-                        {anomaly.reasons.map((reason, reasonIndex) => (
-                          <div
-                            key={reasonIndex}
-                            className="rounded-[14px] bg-[#f8fafc] px-4 py-3 text-[15px] text-[#475569]"
-                          >
-                            {reason}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState text="Аномалій не виявлено." />
-            )}
-          </>
-        )}
-
-        {!loading && activeTab === "forecast" && (
-          <>
-            {forecast ? (
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <StatCard
-                    title="Середній денний cash flow"
-                    value={formatMoney(forecast.averageDailyNet)}
-                  />
-                  <StatCard
-                    title="Горизонт прогнозу"
-                    value={`${forecast.horizonDays || 0} днів`}
-                  />
-                </div>
-
-                <MiniSparkline points={forecast.seriesBalance || []} />
-
-                <div className="space-y-4">
-                  {(forecast.risks || []).map((risk, index) => (
-                    <div
-                      key={index}
-                      className="rounded-[22px] border border-[#d7dde7] bg-white p-6"
-                    >
-                      <div className="mb-3">
-                        <Pill
-                          tone={
-                            risk.level === "high"
-                              ? "severityHigh"
-                              : risk.level === "medium"
-                              ? "severityMedium"
-                              : "severityLow"
-                          }
-                        >
-                          {getSeverityLabel(risk.level)}
-                        </Pill>
-                      </div>
-
-                      <h3 className="mb-2 text-[18px] font-semibold text-[#0f172a]">
-                        {risk.title}
-                      </h3>
-
-                      <p className="text-[15px] leading-[1.6] text-[#475569]">
-                        {risk.message}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <EmptyState text="Дані прогнозу ще не сформовано." />
-            )}
-          </>
-        )}
-
-        {!loading && activeTab === "goals" && (
-          <>
-            {goals && goals.goal ? (
-              <div className="space-y-6">
-                <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-                  <div className="mb-5 flex items-start justify-between gap-6">
-                    <div>
-                      <h2 className="text-[22px] font-semibold text-[#0f172a]">
-                        {goals.goal.name}
-                      </h2>
-                      <div className="mt-2 text-[15px] text-[#64748b]">
-                        Дедлайн: {formatDate(goals.goal.deadline)}
-                      </div>
-                    </div>
-
-                    <div className="w-[280px] max-w-full">
-                      <Gauge value={goals.probability} />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <StatCard
-                      title="Цільова сума"
-                      value={formatMoney(goals.goal.targetAmount)}
-                    />
-                    <StatCard
-                      title="Поточна сума"
-                      value={formatMoney(goals.goal.currentAmount)}
-                    />
-                    <StatCard
-                      title="Потрібно щомісяця"
-                      value={formatMoney(goals.goal.requiredMonthlySavings)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-                    <h3 className="mb-4 text-[18px] font-semibold text-[#0f172a]">
-                      What-if сценарії
-                    </h3>
-
-                    {goals.whatIf?.length ? (
-                      <div className="space-y-3">
-                        {goals.whatIf.map((scenario, index) => (
-                          <div
-                            key={index}
-                            className="rounded-[16px] bg-[#f8fafc] px-4 py-4"
-                          >
-                            <div className="font-medium text-[#0f172a]">
-                              {scenario.scenario}
-                            </div>
-                            <div className="mt-1 text-[14px] text-[#64748b]">
-                              Щомісячні заощадження:{" "}
-                              {formatMoney(scenario.monthlySavings)}
-                            </div>
-                            <div className="mt-1 text-[14px] text-[#64748b]">
-                              Ймовірність: {scenario.probability}%
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[15px] text-[#64748b]">Сценарії відсутні.</div>
-                    )}
-                  </div>
-
-                  <div className="rounded-[22px] border border-[#d7dde7] bg-white p-6">
-                    <h3 className="mb-4 text-[18px] font-semibold text-[#0f172a]">
-                      Розподіл результатів
-                    </h3>
-
-                    {goals.distribution?.length ? (
-                      <div className="space-y-3">
-                        {goals.distribution.map((point, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between rounded-[16px] bg-[#f8fafc] px-4 py-4"
-                          >
-                            <div className="text-[15px] text-[#475569]">
-                              {point.percentile}-й перцентиль
-                            </div>
-                            <div className="font-medium text-[#0f172a]">
-                              {formatMoney(point.amountByDeadline)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[15px] text-[#64748b]">Дані відсутні.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <EmptyState text="Для вкладки цілей поки немає даних." />
-            )}
-          </>
-        )}
-
-        {!loading && activeTab === "patterns" && (
-          <>
-            {patterns.length > 0 ? (
-              <div className="space-y-4">
-                {patterns.map((cluster, index) => (
-                  <div
-                    key={index}
-                    className="rounded-[22px] border border-[#d7dde7] bg-white p-6"
-                  >
-                    <h3 className="mb-2 text-[18px] font-semibold text-[#0f172a]">
-                      {cluster.label}
-                    </h3>
-
-                    <p className="mb-4 text-[15px] leading-[1.6] text-[#475569]">
-                      {cluster.description}
-                    </p>
-
-                    <div className="mb-4 rounded-[16px] bg-[#f8fafc] px-4 py-4 text-[15px] text-[#475569]">
-                      {cluster.recommendation}
-                    </div>
-
-                    {cluster.stats ? (
-                      <div className="mb-4 grid gap-3 md:grid-cols-3">
-                        {Object.entries(cluster.stats).map(([key, value]) => (
-                          <div
-                            key={key}
-                            className="rounded-[16px] border border-[#d7dde7] bg-white px-4 py-4"
-                          >
-                            <div className="text-[12px] uppercase tracking-wide text-[#94a3b8]">
-                              {key}
-                            </div>
-                            <div className="mt-2 font-medium text-[#0f172a]">
-                              {String(value)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {cluster.top?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {cluster.top.map((item, topIndex) => (
-                          <Pill key={topIndex}>{item}</Pill>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState text="Патерни витрат ще не сформовано." />
-            )}
-          </>
         )}
       </div>
     </div>
