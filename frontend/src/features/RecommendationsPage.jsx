@@ -629,11 +629,21 @@ const DIST_LABELS = {
   90:  "Оптимістичний сценарій",
 };
 
+function probabilityComment(pct) {
+  if (pct >= 80) return { text: "Дуже високий шанс досягти цілі — продовжуйте в тому ж темпі.", color: "text-emerald-700" };
+  if (pct >= 60) return { text: "Хороший шанс. Підтримуйте поточний рівень заощаджень.", color: "text-emerald-600" };
+  if (pct >= 40) return { text: "Помірний шанс. Варто трохи збільшити щомісячні відрахування.", color: "text-yellow-600" };
+  if (pct >= 20) return { text: "Шанс невисокий. Розгляньте сценарії «що якщо» нижче.", color: "text-orange-600" };
+  return { text: "Шанс дуже низький. Можливо, варто переглянути суму або термін цілі.", color: "text-red-600" };
+}
+
 function GoalsSection({ goals, currency }) {
   if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
 
   const g = goals.goal;
   const progressPct = Math.round(((g.currentAmount || 0) / (g.targetAmount || 1)) * 100);
+  const isExpired = g.monthsLeft === 0;
+  const isAchieved = goals.probability === 100;
 
   const p50 = goals.distribution?.find((d) => d.percentile === 50);
   const targetAmount = g.targetAmount || 1;
@@ -642,6 +652,34 @@ function GoalsSection({ goals, currency }) {
     : targetAmount;
 
   const freeCashFlow = goals.monthlyFreeCashFlow;
+  const comment = !isExpired && goals.probability != null ? probabilityComment(goals.probability) : null;
+
+  // Якщо дедлайн минув — показуємо лише підсумкову картку
+  if (isExpired) {
+    return (
+      <Card
+        title={`Ціль: ${g.name}`}
+        subtitle={`Дедлайн: ${formatDate(g.deadline)}`}
+        right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
+      >
+        {isAchieved ? (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
+            <div className="font-semibold text-base mb-1">Ціль досягнуто!</div>
+            Ви накопичили {formatMoney(g.currentAmount, currency)} — ціль у {formatMoney(g.targetAmount, currency)} виконана. Вітаємо!
+          </div>
+        ) : (
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+            <div className="font-semibold text-base mb-1">Термін цілі минув</div>
+            Накопичено {formatMoney(g.currentAmount, currency)} з {formatMoney(g.targetAmount, currency)}.{" "}
+            Не вистачало {formatMoney(g.remainingAmount, currency)}.
+            <div className="mt-2 text-amber-700">
+              Рекомендуємо оновити ціль: позначте її як виконану або встановіть новий дедлайн.
+            </div>
+          </div>
+        )}
+      </Card>
+    );
+  }
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
@@ -652,7 +690,13 @@ function GoalsSection({ goals, currency }) {
         right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
       >
         <Gauge value={goals.probability} />
+        {comment && (
+          <div className={cn("mt-2 text-sm font-medium", comment.color)}>{comment.text}</div>
+        )}
         <div className="mt-3 grid gap-1 text-sm text-slate-600">
+          {g.monthsLeft != null && (
+            <div>До дедлайну: <b>{g.monthsLeft} міс.</b></div>
+          )}
           {g.requiredMonthlySavings != null && (
             <div>Потрібно відкладати щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
           )}
