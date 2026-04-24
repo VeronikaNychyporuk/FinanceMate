@@ -1,7 +1,8 @@
 "use strict";
 
 const N_SIMULATIONS = 1000;
-const MIN_SIGMA_RATIO = 0.15; // minimum σ = 15% of μ when historical data is sparse
+const MAX_SIM_MONTHS = 120;    // горизонт симуляції — 10 років
+const MIN_SIGMA_RATIO = 0.20;  // мінімальне σ = 20% від μ при малій кількості даних
 
 // ─── Math utilities ───────────────────────────────────────────────────────────
 
@@ -19,15 +20,10 @@ const stddev = (arr) => {
 };
 
 const percentileOf = (sortedArr, p) => {
-  if (!sortedArr.length) return 0;
-  const idx = Math.min(
-    sortedArr.length - 1,
-    Math.floor((p / 100) * sortedArr.length)
-  );
+  if (!sortedArr.length) return null;
+  const idx = Math.min(sortedArr.length - 1, Math.floor((p / 100) * sortedArr.length));
   return sortedArr[idx];
 };
-
-// ─── Normal random variable via Box-Muller transform ─────────────────────────
 
 const gaussian = (mu, sigma) => {
   if (sigma <= 0) return mu;
@@ -37,218 +33,227 @@ const gaussian = (mu, sigma) => {
   return mu + sigma * z;
 };
 
-// ─── Data preparation ────────────────────────────────────────────────────────
+// ─── Double Exponential Smoothing (Holt) — для тренду внесків ─────────────────
 
-const aggregateByMonth = (transactions) => {
+const doubleES = (series, alpha, beta) => {
+  let L = series[0];
+  let T = series.length > 1 ? series[1] - series[0] : 0;
+  const fitted = [L + T];
+
+  for (let i = 1; i < series.length; i++) {
+    const prevL = L;
+    L = alpha * series[i] + (1 - alpha) * (L + T);
+    T = beta * (L - prevL) + (1 - beta) * T;
+    fitted.push(L + T);
+  }
+
+  return { L, T, fitted };
+};
+
+const optimizeDoubleES = (series) => {
+  if (series.length < 3) return { alpha: 0.3, beta: 0.1 };
+
+  let bestAlpha = 0.3, bestBeta = 0.1, bestMSE = Infinity;
+
+  for (const alpha of [0.1, 0.2, 0.3, 0.5, 0.7, 0.9]) {
+    for (const beta of [0.05, 0.1, 0.2, 0.3]) {
+      const { fitted } = doubleES(series, alpha, beta);
+      const mse = mean(series.slice(1).map((v, i) => (v - fitted[i]) ** 2));
+      if (mse < bestMSE) { bestMSE = mse; bestAlpha = alpha; bestBeta = beta; }
+    }
+  }
+
+  return { alpha: bestAlpha, beta: bestBeta };
+};
+
+// ─── Агрегація GoalTransaction по місяцях ────────────────────────────────────
+
+const aggregateGoalByMonth = (goalTxs) => {
   const map = new Map();
 
-  transactions.forEach((tx) => {
+  goalTxs.forEach((tx) => {
     const d = new Date(tx.date);
     const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
-    const entry = map.get(key) || { income: 0, expense: 0 };
-    if (tx.type === "income") entry.income += tx.amountInBaseCurrency;
-    else entry.expense += tx.amountInBaseCurrency;
+    const entry = map.get(key) || { key, net: 0 };
+    const delta = tx.type === "deposit"
+      ? tx.amountInBaseCurrency
+      : -tx.amountInBaseCurrency;
+    entry.net += delta;
     map.set(key, entry);
   });
 
-  return [...map.values()];
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => v);
 };
 
 const monthsBetween = (from, to) => {
-  const years = to.getFullYear() - from.getFullYear();
-  const months = to.getMonth() - from.getMonth();
-  const raw = years * 12 + months;
+  const years  = to.getFullYear() - from.getFullYear();
+  const months = to.getMonth()    - from.getMonth();
+  const raw    = years * 12 + months;
   return Math.max(0, raw + (to.getDate() >= from.getDate() ? 0 : -1));
 };
 
-// ─── Core simulation ─────────────────────────────────────────────────────────
+// ─── Одна Monte Carlo симуляція ───────────────────────────────────────────────
 
-/**
- * Run N Monte Carlo paths.
- * Each month: income ~ N(μInc, σInc), expense ~ N(μExp, σExp), clamped to ≥ 0.
- * An optional fixedMonthly is added unconditionally (for what-if scenarios).
- * Returns sorted finalAmounts array and success probability.
- */
-const runSimulation = (
-  n,
-  monthsLeft,
-  startAmount,
-  targetAmount,
-  μInc,
-  σInc,
-  μExp,
-  σExp,
-  fixedMonthly = 0
-) => {
-  const finalAmounts = new Array(n);
-  let successes = 0;
+const runSimulation = (currentAmount, targetAmount, μ, σ, multiplier = 1) => {
+  const adjμ = Math.max(0, μ * multiplier);
+  const adjσ = σ * Math.abs(multiplier);
 
-  for (let i = 0; i < n; i++) {
-    let savings = startAmount;
-    for (let m = 0; m < monthsLeft; m++) {
-      const inc = Math.max(0, gaussian(μInc, σInc));
-      const exp = Math.max(0, gaussian(μExp, σExp));
-      savings += Math.max(0, inc - exp) + fixedMonthly;
+  const monthsToReach = new Array(N_SIMULATIONS);
+
+  for (let i = 0; i < N_SIMULATIONS; i++) {
+    let savings = currentAmount;
+    let months  = 0;
+
+    while (savings < targetAmount && months < MAX_SIM_MONTHS) {
+      savings += Math.max(0, gaussian(adjμ, adjσ));
+      months++;
     }
-    finalAmounts[i] = savings;
-    if (savings >= targetAmount) successes++;
+
+    monthsToReach[i] = savings >= targetAmount ? months : MAX_SIM_MONTHS + 1;
   }
 
-  finalAmounts.sort((a, b) => a - b);
+  monthsToReach.sort((a, b) => a - b);
+  return monthsToReach;
+};
+
+// ─── Форматування місяців ─────────────────────────────────────────────────────
+
+const formatMonths = (m) => {
+  if (m == null || m > MAX_SIM_MONTHS) return null;
+  if (m < 1) return "менше місяця";
+  if (m < 12) return `${m} міс.`;
+  const years = Math.floor(m / 12);
+  const rem   = m % 12;
+  return rem === 0 ? `${years} р.` : `${years} р. ${rem} міс.`;
+};
+
+// ─── Аналіз однієї цілі ───────────────────────────────────────────────────────
+
+const analyzeGoal = (goal, goalTxs) => {
+  const now      = new Date();
+  const deadline = new Date(goal.deadline);
+  const monthsLeft      = monthsBetween(now, deadline);
+  const remainingAmount = Math.max(0, goal.targetAmount - goal.currentAmount);
+  const requiredMonthly = monthsLeft > 0
+    ? round(remainingAmount / monthsLeft)
+    : round(remainingAmount);
+
+  const goalBase = {
+    _id:                  goal._id,
+    name:                 goal.name,
+    targetAmount:         round(goal.targetAmount),
+    currentAmount:        round(goal.currentAmount),
+    remainingAmount:      round(remainingAmount),
+    deadline:             goal.deadline,
+    monthsLeft,
+    requiredMonthlySavings: requiredMonthly,
+  };
+
+  // Ціль вже досягнута
+  if (goal.currentAmount >= goal.targetAmount) {
+    return { goal: goalBase, status: "achieved" };
+  }
+
+  // Дедлайн минув
+  if (monthsLeft === 0) {
+    return { goal: goalBase, status: "expired" };
+  }
+
+  // Агрегуємо GoalTransaction по місяцях
+  const monthlyData  = aggregateGoalByMonth(goalTxs);
+  const netDeposits  = monthlyData.map((m) => Math.max(0, m.net));
+
+  // Недостатньо даних для симуляції
+  if (netDeposits.length < 2) {
+    return {
+      goal: goalBase,
+      status: "insufficient_history",
+      lastMonthDeposit: netDeposits.length === 1 ? round(netDeposits[0]) : null,
+    };
+  }
+
+  // Підбираємо параметри Double ES та отримуємо прогноз наступного місяця
+  const { alpha, beta } = optimizeDoubleES(netDeposits);
+  const { L, T, fitted } = doubleES(netDeposits, alpha, beta);
+
+  const forecastedMonthly = Math.max(0, L + T);
+
+  // σ за залишками моделі
+  const residuals = netDeposits.slice(1).map((v, i) => v - fitted[i]);
+  const rawσ = stddev(residuals);
+  const σ = Math.max(rawσ, forecastedMonthly * MIN_SIGMA_RATIO);
+
+  const trend = T > 0 ? "зростаючий" : T < -1 ? "спадний" : "стабільний";
+
+  // Базова симуляція
+  const basePaths = runSimulation(
+    goal.currentAmount, goal.targetAmount, forecastedMonthly, σ
+  );
+
+  const probabilityByDeadline = round(
+    (basePaths.filter((m) => m <= monthsLeft).length / N_SIMULATIONS) * 100
+  );
+
+  const p10 = percentileOf(basePaths, 10);
+  const p50 = percentileOf(basePaths, 50);
+  const p90 = percentileOf(basePaths, 90);
+
+  const timeDistribution = {
+    optimistic:  { months: p10 <= MAX_SIM_MONTHS ? p10 : null, label: formatMonths(p10) },
+    likely:      { months: p50 <= MAX_SIM_MONTHS ? p50 : null, label: formatMonths(p50) },
+    pessimistic: { months: p90 <= MAX_SIM_MONTHS ? p90 : null, label: formatMonths(p90) },
+  };
+
+  // What-if сценарії
+  const scenarioDefs = [
+    { label: "Поточний темп",      multiplier: 1.0 },
+    { label: "+30% заощаджень",    multiplier: 1.3 },
+    { label: "-30% заощаджень",    multiplier: 0.7 },
+  ];
+
+  const whatIf = scenarioDefs.map(({ label, multiplier }) => {
+    const paths = runSimulation(
+      goal.currentAmount, goal.targetAmount, forecastedMonthly, σ, multiplier
+    );
+    const sp50  = percentileOf(paths, 50);
+    const probD = round(
+      (paths.filter((m) => m <= monthsLeft).length / N_SIMULATIONS) * 100
+    );
+    return {
+      label,
+      monthlyContribution: round(forecastedMonthly * multiplier),
+      medianMonths:        sp50 <= MAX_SIM_MONTHS ? sp50 : null,
+      medianLabel:         formatMonths(sp50),
+      probabilityByDeadline: probD,
+    };
+  });
 
   return {
-    probability: round((successes / n) * 100),
-    finalAmounts,
+    goal: goalBase,
+    status: "active",
+    probabilityByDeadline,
+    forecastedMonthly:  round(forecastedMonthly),
+    avgMonthlyDeposit:  round(mean(netDeposits)),
+    dataMonths:         netDeposits.length,
+    trend,
+    timeDistribution,
+    whatIf,
   };
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-const buildGoalsAnalysis = (goals, transactions) => {
-  const activeGoal = goals
-    .filter((g) => g.status === "in_progress")
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
+const buildGoalsAnalysis = (goals, goalTransactions) => {
+  const activeGoals = goals.filter((g) => g.status === "in_progress");
 
-  // Aggregate transactions into monthly income/expense buckets
-  const monthlyData = aggregateByMonth(transactions);
-  const incomes  = monthlyData.map((m) => m.income);
-  const expenses = monthlyData.map((m) => m.expense);
-
-  const μInc = mean(incomes);
-  const μExp = mean(expenses);
-
-  // Raw stddev — zero when only one month of data
-  const rawσInc = stddev(incomes);
-  const rawσExp = stddev(expenses);
-
-  // Apply minimum spread so simulation doesn't collapse to a single line
-  const σInc = Math.max(rawσInc, μInc * MIN_SIGMA_RATIO);
-  const σExp = Math.max(rawσExp, μExp * MIN_SIGMA_RATIO);
-
-  const monthlyFreeCashFlow = round(μInc - μExp);
-  const dataMonths = monthlyData.length;
-
-  const simulationMeta = {
-    n: N_SIMULATIONS,
-    dataMonths,
-    monthlyIncome:  { mean: round(μInc),  stddev: round(rawσInc) },
-    monthlyExpense: { mean: round(μExp),  stddev: round(rawσExp) },
-  };
-
-  if (!activeGoal) {
-    return {
-      goal: null,
-      probability: null,
-      whatIf: [],
-      distribution: [],
-      monthlyFreeCashFlow,
-      simulation: simulationMeta,
-    };
-  }
-
-  const now = new Date();
-  const deadline = new Date(activeGoal.deadline);
-  const monthsLeft = monthsBetween(now, deadline);
-  const remainingAmount = Math.max(0, activeGoal.targetAmount - activeGoal.currentAmount);
-  const requiredMonthlySavings =
-    monthsLeft > 0 ? remainingAmount / monthsLeft : remainingAmount;
-
-  const goalBase = {
-    _id: activeGoal._id,
-    name: activeGoal.name,
-    targetAmount: round(activeGoal.targetAmount),
-    currentAmount: round(activeGoal.currentAmount),
-    deadline: activeGoal.deadline,
-    remainingAmount: round(remainingAmount),
-    monthsLeft,
-    requiredMonthlySavings: round(requiredMonthlySavings),
-  };
-
-  // Goal is at or past deadline — deterministic outcome
-  if (monthsLeft === 0) {
-    return {
-      goal: goalBase,
-      probability: activeGoal.currentAmount >= activeGoal.targetAmount ? 100 : 0,
-      whatIf: [],
-      distribution: [],
-      monthlyFreeCashFlow,
-      simulation: { ...simulationMeta, n: 0 },
-    };
-  }
-
-  // Base Monte Carlo simulation
-  const base = runSimulation(
-    N_SIMULATIONS,
-    monthsLeft,
-    activeGoal.currentAmount,
-    activeGoal.targetAmount,
-    μInc,
-    σInc,
-    μExp,
-    σExp
-  );
-
-  // What-if scenarios — each runs a full simulation with modified parameters
-  const scenarios = [
-    {
-      scenario: "Поточний темп",
-      μInc,       σInc,
-      μExp,       σExp,
-      extra: 0,
-    },
-    {
-      scenario: "+20% доходів",
-      μInc: μInc * 1.2, σInc: σInc * 1.2,
-      μExp,             σExp,
-      extra: 0,
-    },
-    {
-      scenario: "-20% витрат",
-      μInc,             σInc,
-      μExp: μExp * 0.8, σExp: σExp * 0.8,
-      extra: 0,
-    },
-    {
-      scenario: "+10% доходів, -10% витрат",
-      μInc: μInc * 1.1, σInc,
-      μExp: μExp * 0.9, σExp,
-      extra: 0,
-    },
-  ];
-
-  const whatIf = scenarios.map((s) => {
-    const result = runSimulation(
-      N_SIMULATIONS,
-      monthsLeft,
-      activeGoal.currentAmount,
-      activeGoal.targetAmount,
-      s.μInc,
-      s.σInc,
-      s.μExp,
-      s.σExp,
-      s.extra
+  return activeGoals.map((goal) => {
+    const goalTxs = goalTransactions.filter(
+      (tx) => tx.goalId?.toString() === goal._id?.toString()
     );
-    return {
-      scenario: s.scenario,
-      monthlySavings: round(s.μInc - s.μExp + s.extra),
-      probability: result.probability,
-    };
+    return analyzeGoal(goal, goalTxs);
   });
-
-  // Distribution: P10/P25/P50/P75/P90 of simulated final amounts
-  const distribution = [10, 25, 50, 75, 90].map((p) => ({
-    percentile: p,
-    amountByDeadline: round(percentileOf(base.finalAmounts, p)),
-  }));
-
-  return {
-    goal: goalBase,
-    probability: base.probability,
-    whatIf,
-    distribution,
-    monthlyFreeCashFlow,
-    simulation: simulationMeta,
-  };
 };
 
 module.exports = { buildGoalsAnalysis };

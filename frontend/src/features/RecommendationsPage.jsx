@@ -621,181 +621,181 @@ function ForecastSection({ forecast, currency }) {
   );
 }
 
-const DIST_LABELS = {
-  10:  "Песимістичний сценарій",
-  25:  "Помірно-песимістичний",
-  50:  "Найімовірніший",
-  75:  "Помірно-оптимістичний",
-  90:  "Оптимістичний сценарій",
-};
-
 function probabilityComment(pct) {
   if (pct >= 80) return { text: "Дуже високий шанс досягти цілі — продовжуйте в тому ж темпі.", color: "text-emerald-700" };
   if (pct >= 60) return { text: "Хороший шанс. Підтримуйте поточний рівень заощаджень.", color: "text-emerald-600" };
   if (pct >= 40) return { text: "Помірний шанс. Варто трохи збільшити щомісячні відрахування.", color: "text-yellow-600" };
-  if (pct >= 20) return { text: "Шанс невисокий. Розгляньте сценарії «що якщо» нижче.", color: "text-orange-600" };
-  return { text: "Шанс дуже низький. Можливо, варто переглянути суму або термін цілі.", color: "text-red-600" };
+  if (pct >= 20) return { text: "Шанс невисокий. Розгляньте сценарії нижче.", color: "text-orange-600" };
+  return { text: "Шанс дуже низький. Варто переглянути суму або термін цілі.", color: "text-red-600" };
 }
 
-function GoalsSection({ goals, currency }) {
-  if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
-
-  const g = goals.goal;
+function GoalCard({ analysis, currency }) {
+  const { goal: g, status } = analysis;
   const progressPct = Math.round(((g.currentAmount || 0) / (g.targetAmount || 1)) * 100);
-  const isExpired = g.monthsLeft === 0;
-  const isAchieved = goals.probability === 100;
 
-  const p50 = goals.distribution?.find((d) => d.percentile === 50);
-  const targetAmount = g.targetAmount || 1;
-  const distMax = goals.distribution?.length
-    ? Math.max(...goals.distribution.map((d) => d.amountByDeadline), targetAmount)
-    : targetAmount;
-
-  const freeCashFlow = goals.monthlyFreeCashFlow;
-  const comment = !isExpired && goals.probability != null ? probabilityComment(goals.probability) : null;
-
-  // Якщо дедлайн минув — показуємо лише підсумкову картку
-  if (isExpired) {
+  if (status === "achieved") {
     return (
-      <Card
-        title={`Ціль: ${g.name}`}
-        subtitle={`Дедлайн: ${formatDate(g.deadline)}`}
-        right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
-      >
-        {isAchieved ? (
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
-            <div className="font-semibold text-base mb-1">Ціль досягнуто!</div>
-            Ви накопичили {formatMoney(g.currentAmount, currency)} — ціль у {formatMoney(g.targetAmount, currency)} виконана. Вітаємо!
-          </div>
-        ) : (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-            <div className="font-semibold text-base mb-1">Термін цілі минув</div>
-            Накопичено {formatMoney(g.currentAmount, currency)} з {formatMoney(g.targetAmount, currency)}.{" "}
-            Не вистачало {formatMoney(g.remainingAmount, currency)}.
-            <div className="mt-2 text-amber-700">
-              Рекомендуємо оновити ціль: позначте її як виконану або встановіть новий дедлайн.
-            </div>
-          </div>
-        )}
-      </Card>
+      <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-4">
+        <div className="font-semibold text-emerald-800 mb-1">Ціль досягнута: {g.name}</div>
+        <div className="text-sm text-emerald-700">
+          Накопичено {formatMoney(g.currentAmount, currency)} — ціль виконана. Вітаємо!
+        </div>
+      </div>
     );
   }
 
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      {/* Ціль та ймовірність */}
+  if (status === "expired") {
+    return (
+      <div className="border border-amber-200 bg-amber-50 rounded-xl p-4">
+        <div className="font-semibold text-amber-800 mb-1">Термін минув: {g.name}</div>
+        <div className="text-sm text-amber-700">
+          Накопичено {formatMoney(g.currentAmount, currency)} з {formatMoney(g.targetAmount, currency)}.
+          Не вистачало {formatMoney(g.remainingAmount, currency)}.
+          Рекомендуємо оновити ціль або встановити новий дедлайн.
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "insufficient_history") {
+    return (
       <Card
         title={`Ціль: ${g.name}`}
         subtitle={`Накопичено ${formatMoney(g.currentAmount, currency)} з ${formatMoney(g.targetAmount, currency)} · Дедлайн: ${formatDate(g.deadline)}`}
         right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
       >
-        <Gauge value={goals.probability} />
-        {comment && (
-          <div className={cn("mt-2 text-sm font-medium", comment.color)}>{comment.text}</div>
-        )}
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
+          <div className="font-semibold mb-1">Недостатньо даних для прогнозу</div>
+          {analysis.lastMonthDeposit != null
+            ? `Знайдено лише один місяць поповнень (${formatMoney(analysis.lastMonthDeposit, currency)}). Додайте транзакції за щонайменше 2 місяці — і симуляція запрацює.`
+            : "До цієї цілі ще не було жодного поповнення. Почніть відкладати кошти — і система побудує прогноз на основі вашої реальної поведінки."}
+        </div>
+        <div className="mt-3 text-sm text-slate-600">
+          Щомісяця потрібно відкладати: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b>
+          {g.monthsLeft != null && <span> · До дедлайну: <b>{g.monthsLeft} міс.</b></span>}
+        </div>
+      </Card>
+    );
+  }
+
+  // status === "active"
+  const td = analysis.timeDistribution || {};
+  const comment = analysis.probabilityByDeadline != null
+    ? probabilityComment(analysis.probabilityByDeadline)
+    : null;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      {/* Основна картка */}
+      <Card
+        title={`Ціль: ${g.name}`}
+        subtitle={`Накопичено ${formatMoney(g.currentAmount, currency)} з ${formatMoney(g.targetAmount, currency)} · Дедлайн: ${formatDate(g.deadline)}`}
+        right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
+      >
+        <Gauge value={analysis.probabilityByDeadline} />
+        {comment && <div className={cn("mt-2 text-sm font-medium", comment.color)}>{comment.text}</div>}
+
         <div className="mt-3 grid gap-1 text-sm text-slate-600">
-          {g.monthsLeft != null && (
-            <div>До дедлайну: <b>{g.monthsLeft} міс.</b></div>
-          )}
+          {g.monthsLeft != null && <div>До дедлайну: <b>{g.monthsLeft} міс.</b></div>}
           {g.requiredMonthlySavings != null && (
-            <div>Потрібно відкладати щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
+            <div>Щомісяця потрібно: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
           )}
-          {freeCashFlow != null && (
+          {analysis.forecastedMonthly != null && (
             <div>
-              Поточний щомісячний надлишок:{" "}
-              <b className={freeCashFlow < 0 ? "text-red-600" : "text-emerald-700"}>
-                {formatMoney(freeCashFlow, currency)}
+              Прогноз ваших накопичень:{" "}
+              <b className={analysis.forecastedMonthly >= g.requiredMonthlySavings ? "text-emerald-700" : "text-red-600"}>
+                {formatMoney(analysis.forecastedMonthly, currency)} / міс.
               </b>
-            </div>
-          )}
-          {p50 && (
-            <div className="text-xs text-slate-500 mt-1">
-              Найімовірніша сума до дедлайну: <b>{formatMoney(p50.amountByDeadline, currency)}</b>
+              {analysis.trend && <span className="text-xs text-slate-400 ml-1">({analysis.trend} тренд)</span>}
             </div>
           )}
         </div>
-      </Card>
 
-      {/* Сценарії "що якщо" */}
-      <Card title="Сценарії «що якщо»" subtitle="Як зміниться шанс досягти цілі при різних рішеннях">
-        {goals.whatIf?.length ? (
-          <div className="grid gap-2">
-            {goals.whatIf.map((w, i) => (
-              <div key={i} className="border border-slate-200 rounded-xl p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-semibold">{w.scenario || w.label}</div>
-                  <div className={cn(
-                    "text-sm font-bold",
-                    w.probability >= 70 ? "text-emerald-700" :
-                    w.probability >= 40 ? "text-yellow-600" : "text-red-600"
-                  )}>
-                    {w.probability}%
-                  </div>
-                </div>
-                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      w.probability >= 70 ? "bg-emerald-500" :
-                      w.probability >= 40 ? "bg-yellow-400" : "bg-red-400"
-                    )}
-                    style={{ width: `${w.probability}%` }}
-                  />
-                </div>
-                {w.monthlySavings != null && (
-                  <div className="mt-1.5 text-xs text-slate-500">
-                    Заощадження на місяць: {formatMoney(w.monthlySavings, currency)}
-                  </div>
-                )}
+        {/* Коли буде досягнута ціль */}
+        {(td.optimistic || td.likely || td.pessimistic) && (
+          <div className="mt-4 border-t border-slate-100 pt-3 grid gap-1.5">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              За скільки досягнеш цілі
+            </div>
+            {td.optimistic?.label && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">У кращому сценарії</span>
+                <b className="text-emerald-700">{td.optimistic.label}</b>
               </div>
-            ))}
+            )}
+            {td.likely?.label && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Найімовірніше</span>
+                <b className="text-slate-800">{td.likely.label}</b>
+              </div>
+            )}
+            {td.pessimistic?.label && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">У гіршому сценарії</span>
+                <b className={td.pessimistic.months > g.monthsLeft ? "text-red-600" : "text-slate-800"}>
+                  {td.pessimistic.label}
+                  {td.pessimistic.months > g.monthsLeft ? " (після дедлайну)" : ""}
+                </b>
+              </div>
+            )}
+            {!td.optimistic?.label && !td.likely?.label && !td.pessimistic?.label && (
+              <div className="text-sm text-slate-500">За поточного темпу ціль важко досягти — спробуйте збільшити накопичення.</div>
+            )}
           </div>
-        ) : (
-          <div className="text-sm text-slate-500">Сценарії відсутні.</div>
         )}
       </Card>
 
-      {/* Можливі результати */}
-      {goals.distribution?.length ? (
-        <Card
-          title="Можливі результати до дедлайну"
-          subtitle="Діапазон накопиченої суми залежно від сценарію"
-        >
-          <div className="grid gap-2">
-            {goals.distribution.map((point) => {
-              const barWidth = distMax > 0
-                ? Math.round((point.amountByDeadline / distMax) * 100)
-                : 0;
-              const reachesTarget = point.amountByDeadline >= targetAmount;
-              return (
-                <div key={point.percentile}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-slate-500">
-                      {DIST_LABELS[point.percentile] || `Сценарій ${point.percentile}%`}
-                    </span>
-                    <span className={cn("font-semibold", reachesTarget ? "text-emerald-700" : "text-slate-700")}>
-                      {formatMoney(point.amountByDeadline, currency)}
-                      {reachesTarget && " ✓"}
-                    </span>
+      {/* Сценарії */}
+      {analysis.whatIf?.length ? (() => {
+        const baseMonths = analysis.whatIf[0]?.medianMonths;
+        return (
+          <Card title="Що буде, якщо змінити темп заощаджень?">
+            <div className="grid gap-2">
+              {analysis.whatIf.map((w, i) => {
+                const diff = baseMonths != null && w.medianMonths != null && i !== 0
+                  ? w.medianMonths - baseMonths
+                  : null;
+                return (
+                  <div key={i} className={cn(
+                    "border rounded-xl p-3",
+                    i === 0 ? "border-slate-300 bg-slate-50" : "border-slate-200"
+                  )}>
+                    <div className="text-sm font-semibold text-slate-800">{w.label}</div>
+                    <div className="text-sm text-slate-600 mt-0.5">
+                      Внесок: <b>{formatMoney(w.monthlyContribution, currency)} / міс.</b>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {w.medianLabel
+                        ? `Найімовірніше досягнеш за ${w.medianLabel}`
+                        : "За такого темпу ціль недосяжна у прийнятний строк"}
+                      {diff != null && (
+                        <span className={cn("ml-2 font-medium", diff < 0 ? "text-emerald-600" : "text-rose-600")}>
+                          ({diff < 0 ? `на ${Math.abs(diff)} міс. швидше` : `на ${diff} міс. повільніше`})
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={cn("h-full rounded-full", reachesTarget ? "bg-emerald-400" : "bg-slate-400")}
-                      style={{ width: `${barWidth}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            <div className="mt-1 text-xs text-slate-400 flex items-center gap-1">
-              <span className="inline-block w-3 h-2 rounded bg-emerald-400" />
-              ціль досягнута
-              <span className="inline-block w-3 h-2 rounded bg-slate-400 ml-2" />
-              ціль не досягнута
+                );
+              })}
             </div>
-          </div>
-        </Card>
-      ) : null}
+            <div className="mt-3 text-xs text-slate-400">
+              Прогноз базується на реальній історії ваших поповнень цієї цілі.
+            </div>
+          </Card>
+        );
+      })() : null}
+    </div>
+  );
+}
+
+function GoalsSection({ goals, currency }) {
+  if (!Array.isArray(goals) || !goals.length) return <EmptyState text="Активних фінансових цілей поки немає." />;
+
+  return (
+    <div className="grid gap-6">
+      {goals.map((analysis, i) => (
+        <GoalCard key={analysis.goal?._id || i} analysis={analysis} currency={currency} />
+      ))}
     </div>
   );
 }
@@ -1026,7 +1026,7 @@ export default function RecommendationsPage() {
   const overview = snapshot?.data?.overviewByPeriod?.[overviewPeriod] || null;
   const anomalies = snapshot?.data?.anomalies?.items || [];
   const forecast = snapshot?.data?.forecast || null;
-  const goals = snapshot?.data?.goals || null;
+  const goals = snapshot?.data?.goals || [];
   const patternsData = snapshot?.data?.patterns || null;
 
   return (

@@ -1,6 +1,7 @@
 const Transaction = require("../models/Transaction");
 const Budget = require("../models/Budget");
 const Goal = require("../models/Goal");
+const GoalTransaction = require("../models/GoalTransaction");
 const User = require("../models/User");
 const Recommendation = require("../models/Recommendation");
 const RecommendationSnapshot = require("../models/RecommendationSnapshot");
@@ -251,33 +252,40 @@ const buildRecommendations = ({
     }
   }
 
-  if (goalsAnalysis.goal && goalsAnalysis.probability < 65) {
+  const atRiskGoal = Array.isArray(goalsAnalysis)
+    ? goalsAnalysis.find(
+        (a) => a.status === "active" && a.probabilityByDeadline != null && a.probabilityByDeadline < 65
+      )
+    : null;
+
+  if (atRiskGoal) {
     recommendations.push(
       buildRecommendationDocument(userId, {
         type: "goal_feasibility",
         module: "goals",
-        priority: goalsAnalysis.probability < 40 ? "high" : "medium",
+        priority: atRiskGoal.probabilityByDeadline < 40 ? "high" : "medium",
         groupKey: "planning_ahead",
         groupLabel: GROUP_LABELS.planning_ahead,
-        title: `Ціль «${goalsAnalysis.goal.name}» під ризиком`,
-        message: `За поточного темпу накопичення ймовірність досягнення цілі до дедлайну становить близько ${goalsAnalysis.probability}%.`,
+        title: `Ціль «${atRiskGoal.goal.name}» під ризиком`,
+        message: `За поточним темпом накопичень ймовірність досягти цілі до дедлайну становить ${atRiskGoal.probabilityByDeadline}%.`,
         facts: [
-          `Ціль: ${goalsAnalysis.goal.name}`,
-          `Потрібно щомісяця: ${fmtAmount(goalsAnalysis.goal.requiredMonthlySavings, currency)}`,
-          `Ймовірність: ${goalsAnalysis.probability}%`,
+          `Ціль: ${atRiskGoal.goal.name}`,
+          `Потрібно щомісяця: ${fmtAmount(atRiskGoal.goal.requiredMonthlySavings, currency)}`,
+          `Прогнозовані накопичення: ${fmtAmount(atRiskGoal.forecastedMonthly, currency)} / міс.`,
+          `Ймовірність: ${atRiskGoal.probabilityByDeadline}%`,
         ],
         explanation:
-          "Оцінка базується на співставленні потрібного щомісячного темпу накопичення та середнього вільного грошового потоку користувача.",
+          "Оцінка базується на аналізі вашої реальної історії поповнень цієї цілі.",
         relatedEntity: {
           entityType: "goal",
-          entityId: goalsAnalysis.goal._id,
-          label: goalsAnalysis.goal.name,
+          entityId: atRiskGoal.goal._id,
+          label: atRiskGoal.goal.name,
         },
         primaryAction: {
           label: "Переглянути ціль",
           actionType: "open_entity",
           targetType: "goal",
-          targetValue: goalsAnalysis.goal._id.toString(),
+          targetValue: atRiskGoal.goal._id.toString(),
         },
         secondaryAction: {
           label: "Відкрити сценарії",
@@ -285,7 +293,7 @@ const buildRecommendations = ({
           targetType: "tab",
           targetValue: "goals",
         },
-        context: goalsAnalysis,
+        context: atRiskGoal,
         expiresAt: addDays(new Date(), 30),
       })
     );
@@ -413,7 +421,7 @@ exports.generateRecommendationsForUser = async (userId) => {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  const [budget, goals] = await Promise.all([
+  const [budget, goals, goalTransactions] = await Promise.all([
     Budget.findOne({
       userId,
       "period.month": currentMonth,
@@ -421,6 +429,8 @@ exports.generateRecommendationsForUser = async (userId) => {
     }).populate("categoryLimits.categoryId", "name type icon"),
 
     Goal.find({ userId }).sort({ deadline: 1 }),
+
+    GoalTransaction.find({ userId }).sort({ date: 1 }),
   ]);
 
   const ruleBasedAnalysis = analyzeRuleBasedFinancials({
@@ -436,7 +446,7 @@ exports.generateRecommendationsForUser = async (userId) => {
     now,
   });
   const forecast = buildForecast(transactions);
-  const goalsAnalysis = buildGoalsAnalysis(goals, transactions);
+  const goalsAnalysis = buildGoalsAnalysis(goals, goalTransactions);
   const patterns = buildPatterns(expenseTransactions);
 
   await archiveCurrentRecommendations(userId);
