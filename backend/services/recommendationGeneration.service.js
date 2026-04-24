@@ -14,6 +14,9 @@ const {
 const {
   buildForecast,
 } = require("./recommendations/algorithms/forecastEngine");
+const {
+  buildGoalsAnalysis,
+} = require("./recommendations/algorithms/monteCarloGoals");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_TTL_HOURS = 24;
@@ -120,91 +123,6 @@ const groupExpenseByCategory = (transactions) => {
 
 
 
-const buildGoalsAnalysis = (goals, transactions) => {
-  const activeGoal = goals
-    .filter((goal) => goal.status === "in_progress")
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
-
-  const income90 = transactions
-    .filter((tx) => tx.type === "income" && tx.date >= buildDateRangeFilter(90).$gte)
-    .reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
-
-  const expense90 = transactions
-    .filter((tx) => tx.type === "expense" && tx.date >= buildDateRangeFilter(90).$gte)
-    .reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0);
-
-  const monthlyFreeCashFlow = (income90 - expense90) / 3;
-
-  if (!activeGoal) {
-    return {
-      goal: null,
-      probability: null,
-      whatIf: [],
-      distribution: [],
-      monthlyFreeCashFlow: round(monthlyFreeCashFlow),
-    };
-  }
-
-  const remainingAmount = Math.max(
-    0,
-    activeGoal.targetAmount - activeGoal.currentAmount
-  );
-
-  const monthsLeft = monthsBetween(new Date(), new Date(activeGoal.deadline));
-  const requiredMonthlySavings = remainingAmount / monthsLeft;
-
-  const baseProbability = clamp(
-    (monthlyFreeCashFlow / Math.max(requiredMonthlySavings, 1)) * 100,
-    5,
-    95
-  );
-
-  const whatIf = [0.8, 1, 1.2].map((multiplier) => {
-    const projectedSavings = monthlyFreeCashFlow * multiplier;
-
-    const probability = clamp(
-      (projectedSavings / Math.max(requiredMonthlySavings, 1)) * 100,
-      5,
-      95
-    );
-
-    return {
-      scenario:
-        multiplier === 1
-          ? "Поточний темп"
-          : multiplier < 1
-          ? "-20% до вільного залишку"
-          : "+20% до вільного залишку",
-      monthlySavings: round(projectedSavings),
-      probability: round(probability),
-    };
-  });
-
-  const distribution = [25, 50, 75].map((percentilePoint) => ({
-    percentile: percentilePoint,
-    amountByDeadline: round(
-      activeGoal.currentAmount +
-        monthlyFreeCashFlow * monthsLeft * (percentilePoint / 50)
-    ),
-  }));
-
-  return {
-    goal: {
-      _id: activeGoal._id,
-      name: activeGoal.name,
-      targetAmount: round(activeGoal.targetAmount),
-      currentAmount: round(activeGoal.currentAmount),
-      deadline: activeGoal.deadline,
-      remainingAmount: round(remainingAmount),
-      monthsLeft,
-      requiredMonthlySavings: round(requiredMonthlySavings),
-    },
-    probability: round(baseProbability),
-    whatIf,
-    distribution,
-    monthlyFreeCashFlow: round(monthlyFreeCashFlow),
-  };
-};
 
 const buildPatterns = (expenseTransactions) => {
   if (!expenseTransactions.length) {

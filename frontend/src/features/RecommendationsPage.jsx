@@ -643,44 +643,76 @@ function GoalsSection({ goals, currency }) {
   if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
 
   const g = goals.goal;
+  const sim = goals.simulation || {};
   const progressPct = Math.round(((g.currentAmount || 0) / (g.targetAmount || 1)) * 100);
+
+  const p50 = goals.distribution?.find((d) => d.percentile === 50);
+  const targetAmount = g.targetAmount || 1;
+  const distMax = goals.distribution?.length
+    ? Math.max(...goals.distribution.map((d) => d.amountByDeadline), targetAmount)
+    : targetAmount;
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
+      {/* Ціль та ймовірність */}
       <Card
         title={`Ціль: ${g.name}`}
         subtitle={`Накопичено ${formatMoney(g.currentAmount, currency)} з ${formatMoney(g.targetAmount, currency)} · Дедлайн: ${formatDate(g.deadline)}`}
         right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
       >
         <Gauge value={goals.probability} />
-        {g.requiredMonthlySavings != null ? (
-          <div className="mt-3 text-sm text-slate-600">
-            Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b>
-          </div>
-        ) : null}
+        <div className="mt-3 grid gap-1 text-sm text-slate-600">
+          {g.requiredMonthlySavings != null && (
+            <div>Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
+          )}
+          {goals.monthlyFreeCashFlow != null && (
+            <div>
+              Поточний вільний cash flow:{" "}
+              <b className={goals.monthlyFreeCashFlow < 0 ? "text-red-600" : "text-emerald-700"}>
+                {formatMoney(goals.monthlyFreeCashFlow, currency)}
+              </b>
+              {" "}/ міс.
+            </div>
+          )}
+          {p50 && (
+            <div className="text-xs text-slate-500 mt-1">
+              Медіанний прогноз: <b>{formatMoney(p50.amountByDeadline, currency)}</b> до дедлайну
+            </div>
+          )}
+        </div>
       </Card>
 
-      <Card title="What-if сценарії" subtitle="Як зміниться ймовірність при різних діях">
+      {/* What-if сценарії */}
+      <Card title="What-if сценарії" subtitle="Ймовірність при різних фінансових рішеннях">
         {goals.whatIf?.length ? (
           <div className="grid gap-2">
             {goals.whatIf.map((w, i) => (
               <div key={i} className="border border-slate-200 rounded-xl p-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-1">
                   <div className="text-sm font-semibold">{w.scenario || w.label}</div>
-                  <div className="text-sm">
-                    <b>{w.probability}%</b>
+                  <div className={cn(
+                    "text-sm font-bold",
+                    w.probability >= 70 ? "text-emerald-700" :
+                    w.probability >= 40 ? "text-yellow-600" : "text-red-600"
+                  )}>
+                    {w.probability}%
                   </div>
                 </div>
-                <div className="mt-2">
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-slate-900" style={{ width: `${w.probability}%` }} />
-                  </div>
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      w.probability >= 70 ? "bg-emerald-500" :
+                      w.probability >= 40 ? "bg-yellow-400" : "bg-red-400"
+                    )}
+                    style={{ width: `${w.probability}%` }}
+                  />
                 </div>
-                {w.monthlySavings != null ? (
-                  <div className="mt-2 text-xs text-slate-500">
-                    Щомісячні заощадження: {formatMoney(w.monthlySavings, currency)}
+                {w.monthlySavings != null && (
+                  <div className="mt-1.5 text-xs text-slate-500">
+                    Середні заощадження: {formatMoney(w.monthlySavings, currency)} / міс.
                   </div>
-                ) : null}
+                )}
               </div>
             ))}
           </div>
@@ -689,21 +721,78 @@ function GoalsSection({ goals, currency }) {
         )}
       </Card>
 
+      {/* Розподіл результатів симуляції */}
       {goals.distribution?.length ? (
-        <Card title="Розподіл результатів" subtitle="Перцентилі по сумі до дедлайну">
+        <Card
+          title="Розподіл результатів"
+          subtitle={`${sim.n || 1000} симуляцій · сума до дедлайну`}
+        >
           <div className="grid gap-2">
-            {goals.distribution.map((point, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between border border-slate-100 rounded-lg px-3 py-2"
-              >
-                <span className="text-sm text-slate-800">{point.percentile}-й перцентиль</span>
-                <b className="text-sm">{formatMoney(point.amountByDeadline, currency)}</b>
-              </div>
-            ))}
+            {goals.distribution.map((point) => {
+              const barWidth = distMax > 0
+                ? Math.round((point.amountByDeadline / distMax) * 100)
+                : 0;
+              const reachesTarget = point.amountByDeadline >= targetAmount;
+              return (
+                <div key={point.percentile}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-slate-500">
+                      P{point.percentile}
+                      {point.percentile === 50 ? " (медіана)" : ""}
+                    </span>
+                    <span className={cn("font-semibold", reachesTarget ? "text-emerald-700" : "text-slate-700")}>
+                      {formatMoney(point.amountByDeadline, currency)}
+                      {reachesTarget && " ✓"}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full", reachesTarget ? "bg-emerald-400" : "bg-slate-400")}
+                      style={{ width: `${barWidth}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            <div className="mt-1 text-xs text-slate-400 flex items-center gap-1">
+              <span className="inline-block w-3 h-2 rounded bg-emerald-400" />
+              досягає цілі
+              <span className="inline-block w-3 h-2 rounded bg-slate-400 ml-2" />
+              не досягає
+            </div>
           </div>
         </Card>
       ) : null}
+
+      {/* Параметри симуляції */}
+      {sim.dataMonths != null && (
+        <Card title="Параметри симуляції" subtitle="Статистика з якої побудовано модель">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="border border-slate-100 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-1">Симуляцій</div>
+              <div className="font-semibold">{sim.n || 1000}</div>
+            </div>
+            <div className="border border-slate-100 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-1">Місяців даних</div>
+              <div className="font-semibold">{sim.dataMonths}</div>
+            </div>
+            {sim.monthlyIncome && (
+              <div className="border border-slate-100 rounded-lg p-3">
+                <div className="text-xs text-slate-500 mb-1">Дохід / міс.</div>
+                <div className="font-semibold">{formatMoney(sim.monthlyIncome.mean, currency)}</div>
+                <div className="text-xs text-slate-400">σ = {formatMoney(sim.monthlyIncome.stddev, currency)}</div>
+              </div>
+            )}
+            {sim.monthlyExpense && (
+              <div className="border border-slate-100 rounded-lg p-3">
+                <div className="text-xs text-slate-500 mb-1">Витрати / міс.</div>
+                <div className="font-semibold">{formatMoney(sim.monthlyExpense.mean, currency)}</div>
+                <div className="text-xs text-slate-400">σ = {formatMoney(sim.monthlyExpense.stddev, currency)}</div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

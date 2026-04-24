@@ -7,3 +7,4 @@ build/
 eslint.config.mjs
 __tests__/
 start.txt
+coverage/

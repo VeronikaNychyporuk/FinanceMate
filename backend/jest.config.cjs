@@ -5,6 +5,7 @@ module.exports = {
     "utils/**/*.js",
     "middlewares/**/*.js",
     "validations/**/*.js",
+    "services/recommendations/algorithms/**/*.js",
     "!**/node_modules/**"
   ],
   coverageDirectory: "coverage",
