@@ -17,6 +17,9 @@ const {
 const {
   buildGoalsAnalysis,
 } = require("./recommendations/algorithms/monteCarloGoals");
+const {
+  buildPatterns,
+} = require("./recommendations/algorithms/kmeansPatterns");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_TTL_HOURS = 24;
@@ -124,90 +127,6 @@ const groupExpenseByCategory = (transactions) => {
 
 
 
-const buildPatterns = (expenseTransactions) => {
-  if (!expenseTransactions.length) {
-    return { clusters: [] };
-  }
-
-  const amounts = expenseTransactions.map((tx) => tx.amountInBaseCurrency);
-  const smallThreshold = percentile(amounts, 40);
-  const largeThreshold = percentile(amounts, 85);
-
-  const regularSmall = expenseTransactions.filter(
-    (tx) => tx.amountInBaseCurrency <= smallThreshold
-  );
-
-  const rareLarge = expenseTransactions.filter(
-    (tx) => tx.amountInBaseCurrency >= largeThreshold
-  );
-
-  const groupedByCategory = groupExpenseByCategory(expenseTransactions);
-  const totalExpense = expenseTransactions.reduce(
-    (sum, tx) => sum + tx.amountInBaseCurrency,
-    0
-  );
-
-  const dominant = groupedByCategory[0] || null;
-
-  const clusters = [];
-
-  if (regularSmall.length) {
-    clusters.push({
-      label: "Регулярні дрібні витрати",
-      description:
-        "Часті невеликі покупки, які накопичуються в помітну суму.",
-      stats: {
-        transactions: regularSmall.length,
-        totalAmount: round(
-          regularSmall.reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0)
-        ),
-      },
-      top: groupExpenseByCategory(regularSmall)
-        .slice(0, 3)
-        .map((item) => item.categoryName),
-      recommendation:
-        regularSmall.length >= 8
-          ? "Варто перевірити мікровитрати та оцінити, які з них можна скоротити без втрати комфорту."
-          : "Патерн присутній, але поки не створює критичного навантаження.",
-    });
-  }
-
-  if (rareLarge.length) {
-    clusters.push({
-      label: "Рідкі великі покупки",
-      description:
-        "Окремі операції з високою сумою мають суттєвий вплив на фінансовий стан.",
-      stats: {
-        transactions: rareLarge.length,
-        totalAmount: round(
-          rareLarge.reduce((sum, tx) => sum + tx.amountInBaseCurrency, 0)
-        ),
-      },
-      top: groupExpenseByCategory(rareLarge)
-        .slice(0, 3)
-        .map((item) => item.categoryName),
-      recommendation:
-        "Для великих покупок доцільно планувати окремий резерв або ліміт за категорією.",
-    });
-  }
-
-  if (dominant) {
-    clusters.push({
-      label: "Домінантна категорія витрат",
-      description:
-        "Одна категорія формує найбільшу частку загальних витрат.",
-      stats: {
-        category: dominant.categoryName,
-        share: totalExpense > 0 ? round((dominant.amount / totalExpense) * 100) : 0,
-        amount: round(dominant.amount),
-      },
-      top: [dominant.categoryName],
-      recommendation: `Категорія «${dominant.categoryName}» потребує окремої уваги під час планування бюджету.`,
-    });
-  }
-
-  return { clusters };
-};
 
 const buildRecommendationDocument = (userId, partial) => ({
   userId,

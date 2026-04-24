@@ -570,47 +570,29 @@ function ForecastSection({ forecast, currency }) {
   if (forecast.method === "insufficient") {
     return (
       <div className="bg-white border border-slate-200 rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <MethodBadge method="insufficient" />
-        </div>
-        <p className="text-sm text-slate-600">{forecast.insufficientReason}</p>
-        {forecast.model && (
-          <div className="mt-4 flex gap-4 text-xs text-slate-500">
-            <span>Днів даних: <b>{forecast.model.dataSpanDays}</b></span>
-            <span>Транзакцій: <b>{forecast.model.dataPoints}</b></span>
-            <span>Потрібно: <b>≥ 30 дн. і ≥ 20 транз.</b></span>
-          </div>
-        )}
+        <div className="text-base font-semibold text-slate-900 mb-2">Прогноз недоступний</div>
+        <p className="text-sm text-slate-600">
+          Для побудови прогнозу потрібно більше транзакцій. Продовжуйте вести облік — прогноз з'явиться автоматично.
+        </p>
       </div>
     );
   }
-
-  const m = forecast.model || {};
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <Card
         title="Прогноз балансу"
-        subtitle={`Горизонт: ${forecast.horizonDays || 0} днів`}
-        right={<MethodBadge method={forecast.method} />}
+        subtitle={`Очікувана динаміка на ${forecast.horizonDays || 0} днів вперед`}
       >
         <ForecastChart points={forecast.seriesBalance || []} />
         {forecast.averageDailyNet != null ? (
           <div className="text-sm text-slate-600 mt-3">
-            Середній денний cash flow:{" "}
+            Середній щоденний приріст балансу:{" "}
             <b className={forecast.averageDailyNet < 0 ? "text-red-600" : "text-emerald-700"}>
               {formatMoney(forecast.averageDailyNet, currency)}
             </b>
           </div>
         ) : null}
-        {(m.mae != null || m.mape != null) && (
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500 border-t border-slate-100 pt-3">
-            {m.mae  != null && <span>MAE: <b className="text-slate-700">{formatMoney(m.mae, currency)}</b></span>}
-            {m.mape != null && <span>MAPE: <b className="text-slate-700">{m.mape}%</b></span>}
-            <span>Дані: <b className="text-slate-700">{m.dataSpanDays} дн. / {m.dataPoints} транз.</b></span>
-            <ConfidenceBadge level={m.dataConfidence} />
-          </div>
-        )}
       </Card>
 
       <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
@@ -639,11 +621,18 @@ function ForecastSection({ forecast, currency }) {
   );
 }
 
+const DIST_LABELS = {
+  10:  "Песимістичний сценарій",
+  25:  "Помірно-песимістичний",
+  50:  "Найімовірніший",
+  75:  "Помірно-оптимістичний",
+  90:  "Оптимістичний сценарій",
+};
+
 function GoalsSection({ goals, currency }) {
   if (!goals?.goal) return <EmptyState text="Для вкладки цілей поки немає даних." />;
 
   const g = goals.goal;
-  const sim = goals.simulation || {};
   const progressPct = Math.round(((g.currentAmount || 0) / (g.targetAmount || 1)) * 100);
 
   const p50 = goals.distribution?.find((d) => d.percentile === 50);
@@ -651,6 +640,8 @@ function GoalsSection({ goals, currency }) {
   const distMax = goals.distribution?.length
     ? Math.max(...goals.distribution.map((d) => d.amountByDeadline), targetAmount)
     : targetAmount;
+
+  const freeCashFlow = goals.monthlyFreeCashFlow;
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
@@ -663,27 +654,26 @@ function GoalsSection({ goals, currency }) {
         <Gauge value={goals.probability} />
         <div className="mt-3 grid gap-1 text-sm text-slate-600">
           {g.requiredMonthlySavings != null && (
-            <div>Потрібно щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
+            <div>Потрібно відкладати щомісяця: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
           )}
-          {goals.monthlyFreeCashFlow != null && (
+          {freeCashFlow != null && (
             <div>
-              Поточний вільний cash flow:{" "}
-              <b className={goals.monthlyFreeCashFlow < 0 ? "text-red-600" : "text-emerald-700"}>
-                {formatMoney(goals.monthlyFreeCashFlow, currency)}
+              Поточний щомісячний надлишок:{" "}
+              <b className={freeCashFlow < 0 ? "text-red-600" : "text-emerald-700"}>
+                {formatMoney(freeCashFlow, currency)}
               </b>
-              {" "}/ міс.
             </div>
           )}
           {p50 && (
             <div className="text-xs text-slate-500 mt-1">
-              Медіанний прогноз: <b>{formatMoney(p50.amountByDeadline, currency)}</b> до дедлайну
+              Найімовірніша сума до дедлайну: <b>{formatMoney(p50.amountByDeadline, currency)}</b>
             </div>
           )}
         </div>
       </Card>
 
-      {/* What-if сценарії */}
-      <Card title="What-if сценарії" subtitle="Ймовірність при різних фінансових рішеннях">
+      {/* Сценарії "що якщо" */}
+      <Card title="Сценарії «що якщо»" subtitle="Як зміниться шанс досягти цілі при різних рішеннях">
         {goals.whatIf?.length ? (
           <div className="grid gap-2">
             {goals.whatIf.map((w, i) => (
@@ -710,7 +700,7 @@ function GoalsSection({ goals, currency }) {
                 </div>
                 {w.monthlySavings != null && (
                   <div className="mt-1.5 text-xs text-slate-500">
-                    Середні заощадження: {formatMoney(w.monthlySavings, currency)} / міс.
+                    Заощадження на місяць: {formatMoney(w.monthlySavings, currency)}
                   </div>
                 )}
               </div>
@@ -721,11 +711,11 @@ function GoalsSection({ goals, currency }) {
         )}
       </Card>
 
-      {/* Розподіл результатів симуляції */}
+      {/* Можливі результати */}
       {goals.distribution?.length ? (
         <Card
-          title="Розподіл результатів"
-          subtitle={`${sim.n || 1000} симуляцій · сума до дедлайну`}
+          title="Можливі результати до дедлайну"
+          subtitle="Діапазон накопиченої суми залежно від сценарію"
         >
           <div className="grid gap-2">
             {goals.distribution.map((point) => {
@@ -737,8 +727,7 @@ function GoalsSection({ goals, currency }) {
                 <div key={point.percentile}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-slate-500">
-                      P{point.percentile}
-                      {point.percentile === 50 ? " (медіана)" : ""}
+                      {DIST_LABELS[point.percentile] || `Сценарій ${point.percentile}%`}
                     </span>
                     <span className={cn("font-semibold", reachesTarget ? "text-emerald-700" : "text-slate-700")}>
                       {formatMoney(point.amountByDeadline, currency)}
@@ -756,56 +745,33 @@ function GoalsSection({ goals, currency }) {
             })}
             <div className="mt-1 text-xs text-slate-400 flex items-center gap-1">
               <span className="inline-block w-3 h-2 rounded bg-emerald-400" />
-              досягає цілі
+              ціль досягнута
               <span className="inline-block w-3 h-2 rounded bg-slate-400 ml-2" />
-              не досягає
+              ціль не досягнута
             </div>
           </div>
         </Card>
       ) : null}
-
-      {/* Параметри симуляції */}
-      {sim.dataMonths != null && (
-        <Card title="Параметри симуляції" subtitle="Статистика з якої побудовано модель">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="border border-slate-100 rounded-lg p-3">
-              <div className="text-xs text-slate-500 mb-1">Симуляцій</div>
-              <div className="font-semibold">{sim.n || 1000}</div>
-            </div>
-            <div className="border border-slate-100 rounded-lg p-3">
-              <div className="text-xs text-slate-500 mb-1">Місяців даних</div>
-              <div className="font-semibold">{sim.dataMonths}</div>
-            </div>
-            {sim.monthlyIncome && (
-              <div className="border border-slate-100 rounded-lg p-3">
-                <div className="text-xs text-slate-500 mb-1">Дохід / міс.</div>
-                <div className="font-semibold">{formatMoney(sim.monthlyIncome.mean, currency)}</div>
-                <div className="text-xs text-slate-400">σ = {formatMoney(sim.monthlyIncome.stddev, currency)}</div>
-              </div>
-            )}
-            {sim.monthlyExpense && (
-              <div className="border border-slate-100 rounded-lg p-3">
-                <div className="text-xs text-slate-500 mb-1">Витрати / міс.</div>
-                <div className="font-semibold">{formatMoney(sim.monthlyExpense.mean, currency)}</div>
-                <div className="text-xs text-slate-400">σ = {formatMoney(sim.monthlyExpense.stddev, currency)}</div>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
 
-const MONETARY_STAT_KEYS = new Set(["totalAmount", "amount"]);
+const MONETARY_STAT_KEYS = new Set(["totalAmount", "avgAmount"]);
+const STAT_LABELS = {
+  transactions: "Транзакцій",
+  avgAmount: "Середня сума",
+  totalAmount: "Загальна сума",
+};
 
-function PatternsSection({ patterns, currency }) {
-  if (!patterns.length) return <EmptyState text="Патерни витрат ще не сформовано." />;
+function PatternsSection({ data, currency }) {
+  const clusters = data?.clusters || [];
+
+  if (!clusters.length) return <EmptyState text="Патерни витрат ще не сформовано." />;
 
   return (
-    <Card title="Кластери поведінки витрат" subtitle="Сегменти, що описують типові патерни">
+    <Card title="Типи поведінки витрат" subtitle="Автоматично виявлені групи витрат за вашою історією">
       <div className="grid md:grid-cols-2 gap-4">
-        {patterns.map((cluster, index) => (
+        {clusters.map((cluster, index) => (
           <div key={index} className="border border-slate-200 rounded-xl p-4">
             <div className="text-base font-semibold">{cluster.label}</div>
             <div className="text-sm text-slate-600 mt-1">{cluster.description}</div>
@@ -815,7 +781,7 @@ function PatternsSection({ patterns, currency }) {
                 {Object.entries(cluster.stats).map(([key, value]) => (
                   <Metric
                     key={key}
-                    label={key}
+                    label={STAT_LABELS[key] || key}
                     value={MONETARY_STAT_KEYS.has(key) ? formatMoney(value, currency) : String(value)}
                   />
                 ))}
@@ -824,7 +790,7 @@ function PatternsSection({ patterns, currency }) {
 
             {cluster.top?.length ? (
               <div className="text-sm text-slate-700 mt-4">
-                <b>Топ:</b> {cluster.top.join(", ")}
+                <b>Топ категорій:</b> {cluster.top.join(", ")}
               </div>
             ) : null}
 
@@ -1017,7 +983,7 @@ export default function RecommendationsPage() {
   const anomalies = snapshot?.data?.anomalies?.items || [];
   const forecast = snapshot?.data?.forecast || null;
   const goals = snapshot?.data?.goals || null;
-  const patterns = snapshot?.data?.patterns?.clusters || [];
+  const patternsData = snapshot?.data?.patterns || null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1098,7 +1064,7 @@ export default function RecommendationsPage() {
             {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} currency={userCurrency} />}
             {activeTab === "forecast" && <ForecastSection forecast={forecast} currency={userCurrency} />}
             {activeTab === "goals" && <GoalsSection goals={goals} currency={userCurrency} />}
-            {activeTab === "patterns" && <PatternsSection patterns={patterns} currency={userCurrency} />}
+            {activeTab === "patterns" && <PatternsSection data={patternsData} currency={userCurrency} />}
           </div>
         )}
       </div>

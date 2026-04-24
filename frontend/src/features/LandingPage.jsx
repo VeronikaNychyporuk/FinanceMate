@@ -17,7 +17,7 @@ function LandingPage() {
     <div className="d-flex flex-column min-vh-100">
       <LandingNavbar showAuthButtons={true} />
 
-      <div className="container text-center my-5">
+      <div className="container text-center my-5 flex-grow-1">
         <div className="mb-5"></div>
         <h1 className="display-3 fw-bold" style={{ fontFamily: "'Libre Bodoni', serif" }}>
           FinanceMate
