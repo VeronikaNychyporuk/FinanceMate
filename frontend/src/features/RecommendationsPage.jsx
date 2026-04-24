@@ -712,37 +712,48 @@ function GoalCard({ analysis, currency }) {
         </div>
 
         {/* Коли буде досягнута ціль */}
-        {(td.optimistic || td.likely || td.pessimistic) && (
-          <div className="mt-4 border-t border-slate-100 pt-3 grid gap-1.5">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              За скільки досягнеш цілі
+        {(td.optimistic || td.likely || td.pessimistic) && (() => {
+          const isAfterDeadline = (m) => m != null && g.monthsLeft != null && m > g.monthsLeft;
+          const allAfter = isAfterDeadline(td.optimistic?.months) &&
+                           isAfterDeadline(td.likely?.months) &&
+                           isAfterDeadline(td.pessimistic?.months);
+          const rowColor = (m) =>
+            !isAfterDeadline(m) ? "text-emerald-700" : "text-rose-600";
+
+          return (
+            <div className="mt-4 border-t border-slate-100 pt-3 grid gap-1.5">
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                За скільки досягнеш цілі
+              </div>
+              {allAfter && g.monthsLeft != null && (
+                <div className="text-s text-rose-600 mb-1">
+                  Усі сценарії виходять за межі дедлайну ({g.monthsLeft} міс.). Розгляньте збільшення внесків або перенесення дедлайну.
+                </div>
+              )}
+              {td.optimistic?.label && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">У кращому сценарії</span>
+                  <b className={rowColor(td.optimistic.months)}>{td.optimistic.label}</b>
+                </div>
+              )}
+              {td.likely?.label && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Найімовірніше</span>
+                  <b className={rowColor(td.likely.months)}>{td.likely.label}</b>
+                </div>
+              )}
+              {td.pessimistic?.label && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">У гіршому сценарії</span>
+                  <b className={rowColor(td.pessimistic.months)}>{td.pessimistic.label}</b>
+                </div>
+              )}
+              {!td.optimistic?.label && !td.likely?.label && !td.pessimistic?.label && (
+                <div className="text-sm text-slate-500">За поточного темпу ціль важко досягти — спробуйте збільшити накопичення.</div>
+              )}
             </div>
-            {td.optimistic?.label && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">У кращому сценарії</span>
-                <b className="text-emerald-700">{td.optimistic.label}</b>
-              </div>
-            )}
-            {td.likely?.label && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Найімовірніше</span>
-                <b className="text-slate-800">{td.likely.label}</b>
-              </div>
-            )}
-            {td.pessimistic?.label && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">У гіршому сценарії</span>
-                <b className={td.pessimistic.months > g.monthsLeft ? "text-red-600" : "text-slate-800"}>
-                  {td.pessimistic.label}
-                  {td.pessimistic.months > g.monthsLeft ? " (після дедлайну)" : ""}
-                </b>
-              </div>
-            )}
-            {!td.optimistic?.label && !td.likely?.label && !td.pessimistic?.label && (
-              <div className="text-sm text-slate-500">За поточного темпу ціль важко досягти — спробуйте збільшити накопичення.</div>
-            )}
-          </div>
-        )}
+          );
+        })()}
       </Card>
 
       {/* Сценарії */}
@@ -777,9 +788,6 @@ function GoalCard({ analysis, currency }) {
                   </div>
                 );
               })}
-            </div>
-            <div className="mt-3 text-xs text-slate-400">
-              Прогноз базується на реальній історії ваших поповнень цієї цілі.
             </div>
           </Card>
         );
