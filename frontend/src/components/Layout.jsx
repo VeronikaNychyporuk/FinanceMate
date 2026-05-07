@@ -3,39 +3,45 @@ import axios from 'axios';
 import ExchangeRates from './ExchangeRates';
 
 import {
-  AppBar, Toolbar, IconButton, Typography, Drawer, List, ListItemButton,
-  ListItemIcon, ListItemText, Menu, MenuItem, Box
+  AppBar, Toolbar, IconButton, Typography, Menu, MenuItem, Box
 } from '@mui/material';
-import {
-  Menu as MenuIcon, Notifications, AccountCircle,
-  Dashboard, AccountBalanceWallet, ListAlt, Flag, EventRepeat
-} from '@mui/icons-material';
+import { Notifications, AccountCircle, Menu as MenuIcon } from '@mui/icons-material';
 import {
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  ArrowLeftRight,
+  RefreshCw,
+  Wallet,
+  Target,
+  Lightbulb,
+} from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
-const drawerWidth = 240;
+const DRAWER_WIDTH = 248;
+
+const NAV_ITEMS = [
+  { label: 'Аналітика',           path: '/dashboard',               Icon: LayoutDashboard },
+  { label: 'Транзакції',          path: '/transactions',             Icon: ArrowLeftRight },
+  { label: 'Регулярні транзакції',path: '/recurring-transactions',   Icon: RefreshCw },
+  { label: 'Бюджет',              path: '/budgets',                  Icon: Wallet },
+  { label: 'Цілі',                path: '/goals',                    Icon: Target },
+  { label: 'Рекомендації',        path: '/recommendations',          Icon: Lightbulb },
+];
 
 export default function Layout({ children }) {
   const [open, setOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
 
-  const handleDrawerToggle = () => {
-    setOpen(!open);
-  };
-
-  const handleMenu = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const handleDrawerToggle = () => setOpen((v) => !v);
+  const handleMenu = (e) => setAnchorEl(e.currentTarget);
+  const handleClose = () => setAnchorEl(null);
 
   const handleProfileAction = (action) => {
     handleClose();
@@ -52,57 +58,31 @@ export default function Layout({ children }) {
     navigate('/');
   };
 
-  const navItems = [
-    { label: 'Аналітика', icon: <Dashboard />, path: '/dashboard' },
-    { label: 'Бюджет', icon: <AccountBalanceWallet />, path: '/budgets' },
-    { label: 'Транзакції', icon: <ListAlt />, path: '/transactions' },
-    { label: 'Регулярні транзакції', icon: <EventRepeat />, path: '/recurring-transactions' },
-    { label: 'Цілі', icon: <Flag />, path: '/goals' },
-    { label: 'Рекомендації', icon: <Flag />, path: '/recommendations' },
-    { label: 'РекомендаціїMock', icon: <Flag />, path: '/recommendationsMock' }
-  ];
-
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
-
     const fetchNotifications = () => {
-      axios.get('http://localhost:5000/api/notifications', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => {
-          const has = res.data.some(n => n.status === 'unread');
-          setHasUnread(has);
+      axios
+        .get('http://localhost:5000/api/notifications', {
+          headers: { Authorization: `Bearer ${token}` },
         })
-        .catch(() => {
-          setHasUnread(false); // при помилці приховуємо крапку
-        });
+        .then((res) => setHasUnread(res.data.some((n) => n.status === 'unread')))
+        .catch(() => setHasUnread(false));
     };
-
-    // перше завантаження
     fetchNotifications();
-
-    // запуск кожні 60 секунд
     const interval = setInterval(fetchNotifications, 30000);
-
-    // очищення при виході
     return () => clearInterval(interval);
   }, []);
 
   return (
     <Box sx={{ display: 'flex' }}>
-      {/* Верхній navbar */}
-      <AppBar position="fixed" sx={{ zIndex: 1300, backgroundColor: '#212529' }}>
+      {/* ── Top bar ── */}
+      <AppBar position="fixed" sx={{ zIndex: 1300, backgroundColor: '#171923' }}>
         <Toolbar className="flex justify-between">
           <div className="flex items-center gap-2">
             <IconButton
-                color="inherit"
-                onClick={handleDrawerToggle}
-                sx={{
-                    '&:hover': {
-                        backgroundColor: 'rgba(255,255,255,0.1)',
-                    },
-                    transition: 'background-color 0.2s ease'
-                }}
+              color="inherit"
+              onClick={handleDrawerToggle}
+              sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' }, transition: 'background-color 0.15s' }}
             >
               <MenuIcon />
             </IconButton>
@@ -111,41 +91,26 @@ export default function Layout({ children }) {
               FinanceMate
             </Typography>
           </div>
-          <div>
+
+          <div className="flex items-center">
             <IconButton
               color="inherit"
               onClick={() => navigate('/notifications')}
-              sx={{
-                position: 'relative',
-                '&:hover': {
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                },
-                transition: 'background-color 0.2s ease'
-              }}
+              sx={{ position: 'relative', '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' }, transition: 'background-color 0.15s' }}
             >
               <Notifications />
               {hasUnread && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-600 rounded-full" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full" />
               )}
             </IconButton>
-
             <IconButton
-                color="inherit"
-                onClick={handleMenu}
-                sx={{
-                    '&:hover': {
-                        backgroundColor: 'rgba(255,255,255,0.1)',
-                    },
-                    transition: 'background-color 0.2s ease'
-                }}
+              color="inherit"
+              onClick={handleMenu}
+              sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' }, transition: 'background-color 0.15s' }}
             >
-                <AccountCircle />
+              <AccountCircle />
             </IconButton>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleClose}
-            >
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
               <MenuItem onClick={() => handleProfileAction('profile')}>Профіль</MenuItem>
               <MenuItem onClick={() => handleProfileAction('settings')}>Налаштування</MenuItem>
               <MenuItem onClick={() => handleProfileAction('logout')}>Вийти</MenuItem>
@@ -154,67 +119,79 @@ export default function Layout({ children }) {
         </Toolbar>
       </AppBar>
 
-      {/* Бічний drawer */}
-      <Drawer
-        variant="persistent"
-        anchor="left"
-        open={open}
+      {/* ── Sidebar ── */}
+      <aside
+        style={{
+          width: open ? DRAWER_WIDTH : 0,
+          minWidth: open ? DRAWER_WIDTH : 0,
+          top: 64,
+          zIndex: 1200,
+          transition: 'width 0.2s ease, min-width 0.2s ease',
+          overflow: 'hidden',
+        }}
+        className="fixed left-0 bottom-0 flex flex-col bg-[#171923] border-r border-white/5"
+      >
+        <div className="flex flex-col h-full" style={{ width: DRAWER_WIDTH }}>
+          {/* Nav section label */}
+          <div className="px-4 pt-6 pb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+              Навігація
+            </span>
+          </div>
+
+          {/* Nav items */}
+          <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
+            {NAV_ITEMS.map(({ label, path, Icon }) => {
+              const isActive =
+                location.pathname === path ||
+                (path !== '/dashboard' && location.pathname.startsWith(path));
+
+              return (
+                <button
+                  key={path}
+                  type="button"
+                  onClick={() => navigate(path)}
+                  className={[
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                    isActive
+                      ? 'bg-white/10 text-white'
+                      : 'text-white/50 hover:bg-white/5 hover:text-white/80',
+                  ].join(' ')}
+                >
+                  <Icon size={17} strokeWidth={isActive ? 2.2 : 1.7} className="shrink-0" />
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Exchange rates at bottom */}
+          <div className="px-3 pb-5 pt-4 border-t border-white/5">
+            <ExchangeRates />
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <Box
+        component="main"
         sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            backgroundColor: '#212529',
-            color: 'white',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-          },
+          flexGrow: 1,
+          p: 3,
+          ml: open ? `${DRAWER_WIDTH}px` : 0,
+          transition: 'margin-left 0.2s ease',
         }}
       >
-        <Toolbar />
-        <List>
-          {navItems.map((item) => (
-            <ListItemButton
-              key={item.label}
-              onClick={() => navigate(item.path)}
-              sx={{
-                '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                },
-                transition: 'background-color 0.2s ease'
-              }}
-            >
-              <ListItemIcon sx={{ color: 'white', fontFamily: "'Libre Bodoni', serif"}}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.label} />
-            </ListItemButton>
-          ))}
-        </List>
-
-        <Box sx={{ mt: 'auto', p: 2 }}>
-          <ExchangeRates />
-        </Box>
-      </Drawer>
-
-      {/* Основний контент */}
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         {children}
       </Box>
 
-      {/* Попап підтвердження виходу */}
+      {/* ── Logout dialog ── */}
       <Dialog
         open={logoutDialogOpen}
         onClose={() => setLogoutDialogOpen(false)}
         PaperProps={{
-          sx: {
-            backgroundColor: '#2d2d2d',
-            color: '#fff',
-            borderRadius: 3,
-            p: 2,
-          }
+          sx: { backgroundColor: '#2d2d2d', color: '#fff', borderRadius: 3, p: 2 },
         }}
       >
         <DialogTitle sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -228,27 +205,15 @@ export default function Layout({ children }) {
         <DialogActions sx={{ justifyContent: 'flex-end' }}>
           <Button
             onClick={() => setLogoutDialogOpen(false)}
-            sx={{
-              color: '#fff',
-              borderColor: '#fff',
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.1)'
-              }
-            }}
+            sx={{ color: '#fff', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
           >
             Скасувати
           </Button>
-          <Button
-            onClick={handleLogoutConfirm}
-            variant="contained"
-            color="error"
-            sx={{ ml: 1 }}
-          >
+          <Button onClick={handleLogoutConfirm} variant="contained" color="error" sx={{ ml: 1 }}>
             Вийти
           </Button>
         </DialogActions>
       </Dialog>
-
     </Box>
   );
 }
