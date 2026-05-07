@@ -3,7 +3,6 @@ const {
   fetchRecommendationById,
   fetchRecommendationSnapshot,
   updateRecommendationStatus,
-  snoozeRecommendation,
 } = require("../services/recommendation.service");
 
 const {
@@ -53,23 +52,6 @@ exports.patchRecommendationStatus = async (req, res) => {
       req.userId,
       req.params.id,
       req.body.status
-    );
-
-    res.status(200).json(updated);
-  } catch (err) {
-    const statusCode =
-      err.message === "Рекомендацію не знайдено." ? 404 : 400;
-
-    res.status(statusCode).json({ message: err.message });
-  }
-};
-
-exports.patchRecommendationSnooze = async (req, res) => {
-  try {
-    const updated = await snoozeRecommendation(
-      req.userId,
-      req.params.id,
-      req.body.until
     );
 
     res.status(200).json(updated);

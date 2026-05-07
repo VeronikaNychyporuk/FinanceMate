@@ -8,10 +8,9 @@ import {
   Legend,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement
+  BarElement
 } from 'chart.js';
-import { Pie, Line } from 'react-chartjs-2';
+import { Pie, Bar } from 'react-chartjs-2';
 import CustomProgressBar from '../components/CustomProgressBar';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
@@ -24,8 +23,7 @@ ChartJS.register(
   Legend,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement
+  BarElement
 );
 
 export default function DashboardPage() {
@@ -37,10 +35,8 @@ export default function DashboardPage() {
   const currentYear = now.year();
   const currentMonthStart = now.startOf('month');
 
-  // Лінійний графік: рік (стрілочки). За замовчуванням — поточний.
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  // Баланс + Pie: період місяця (стрілочки). За замовчуванням — поточний місяць.
   const [selectedMonthPeriod, setSelectedMonthPeriod] = useState(currentMonthStart);
 
   useEffect(() => {
@@ -182,6 +178,11 @@ export default function DashboardPage() {
     return summary;
   }, [txSelectedMonth]);
 
+  const PIE_COLORS = [
+    '#f87171', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#f472b6',
+    '#fb923c', '#38bdf8', '#4ade80', '#e879f9', '#facc15', '#2dd4bf'
+  ];
+
   const pieData = useMemo(() => {
     return {
       labels: Object.keys(categorySummary),
@@ -189,16 +190,13 @@ export default function DashboardPage() {
         {
           label: 'Витрати',
           data: Object.values(categorySummary),
-          backgroundColor: ['#f87171', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#f472b6'],
+          backgroundColor: PIE_COLORS,
           borderWidth: 1
         }
       ]
     };
   }, [categorySummary]);
 
-  /**
-   * Лінійний графік: 12 місяців для selectedYear
-   */
   const monthlyStats = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
       const filtered = transactions.filter((t) => {
@@ -218,35 +216,78 @@ export default function DashboardPage() {
     });
   }, [transactions, selectedYear]);
 
-  const lineData = useMemo(() => {
+  const hasYearData = useMemo(
+    () => monthlyStats.some((m) => m.income > 0 || m.expense > 0),
+    [monthlyStats]
+  );
+
+  const barData = useMemo(() => {
     return {
       labels: monthlyStats.map((m) => m.month),
       datasets: [
         {
           label: 'Доходи',
           data: monthlyStats.map((m) => m.income),
+          backgroundColor: 'rgba(34,197,94,0.75)',
           borderColor: 'rgb(34,197,94)',
-          backgroundColor: 'rgba(34,197,94,0.2)',
-          tension: 0.1
+          borderWidth: 1,
+          borderRadius: 4
         },
         {
           label: 'Витрати',
           data: monthlyStats.map((m) => m.expense),
+          backgroundColor: 'rgba(239,68,68,0.75)',
           borderColor: 'rgb(239,68,68)',
-          backgroundColor: 'rgba(239,68,68,0.2)',
-          tension: 0.1
+          borderWidth: 1,
+          borderRadius: 4
         }
       ]
     };
   }, [monthlyStats]);
 
-  const chartOptions = useMemo(() => {
+  const barOptions = useMemo(() => {
     return {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } }
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ${currency}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: (v) => `${v} ${currency}`
+          }
+        }
+      }
     };
-  }, []);
+  }, [currency]);
+
+  const pieOptions = useMemo(() => {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = ctx.parsed;
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+              return ` ${ctx.label}: ${val.toFixed(2)} ${currency} (${pct}%)`;
+            }
+          }
+        }
+      }
+    };
+  }, [currency]);
 
   const selectedMonthTitle = selectedMonthPeriod.format('MMMM YYYY');
 
@@ -288,12 +329,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <p className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          {balance >= 0 ? '+' : '–'} {Math.abs(balance).toFixed(2)} {currency}
-        </p>
+        <div className="flex flex-wrap gap-4 mt-3">
+          <div className="flex-1 min-w-[140px] bg-green-50 rounded-xl px-4 py-3">
+            <p className="text-xs text-green-700 font-medium mb-1">Доходи</p>
+            <p className="text-lg font-bold text-green-600">+{income.toFixed(2)} {currency}</p>
+          </div>
+          <div className="flex-1 min-w-[140px] bg-red-50 rounded-xl px-4 py-3">
+            <p className="text-xs text-red-700 font-medium mb-1">Витрати</p>
+            <p className="text-lg font-bold text-red-500">−{expense.toFixed(2)} {currency}</p>
+          </div>
+          <div className={`flex-1 min-w-[140px] rounded-xl px-4 py-3 ${balance >= 0 ? 'bg-blue-50' : 'bg-orange-50'}`}>
+            <p className={`text-xs font-medium mb-1 ${balance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Баланс</p>
+            <p className={`text-lg font-bold ${balance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+              {balance >= 0 ? '+' : '–'}{Math.abs(balance).toFixed(2)} {currency}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Лінійний графік + стрілочки року */}
+      {/* Стовпчастий графік + стрілочки року */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-800">
@@ -329,9 +383,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ height: 300 }}>
-          <Line data={lineData} options={chartOptions} />
-        </div>
+        {hasYearData ? (
+          <div style={{ height: 300 }}>
+            <Bar data={barData} options={barOptions} />
+          </div>
+        ) : (
+          <p className="text-gray-500 py-8 text-center">Немає даних за {selectedYear} рік.</p>
+        )}
       </div>
 
       {/* Pie по категоріях + ті самі стрілочки місяця */}
@@ -373,8 +431,8 @@ export default function DashboardPage() {
         {Object.keys(categorySummary).length === 0 ? (
           <p className="text-gray-500">Немає витрат у цьому місяці.</p>
         ) : (
-          <div style={{ height: 300 }}>
-            <Pie data={pieData} options={chartOptions} />
+          <div style={{ height: 320 }}>
+            <Pie data={pieData} options={pieOptions} />
           </div>
         )}
       </div>

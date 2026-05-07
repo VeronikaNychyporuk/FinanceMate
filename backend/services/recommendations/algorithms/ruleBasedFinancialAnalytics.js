@@ -375,7 +375,7 @@ const analyzeRuleBasedFinancials = ({
           targetValue: "overview",
         },
         secondaryAction: {
-          label: "До патернів витрат",
+          label: "Відкрити патерни",
           actionType: "navigate",
           targetType: "tab",
           targetValue: "patterns",
@@ -669,7 +669,7 @@ const analyzeRuleBasedFinancials = ({
           targetValue: "overview",
         },
         secondaryAction: {
-          label: "До патернів витрат",
+          label: "Відкрити патерни",
           actionType: "navigate",
           targetType: "tab",
           targetValue: "patterns",

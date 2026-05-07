@@ -18,7 +18,6 @@ exports.getRecommendationsQuerySchema = Joi.object({
     .optional(),
 
   includeExpired: Joi.boolean().optional().default(false),
-  includeSnoozed: Joi.boolean().optional().default(false),
 
   page: Joi.number().integer().min(1).optional().default(1),
   limit: Joi.number().integer().min(1).max(50).optional().default(10),
@@ -28,8 +27,4 @@ exports.updateRecommendationStatusSchema = Joi.object({
   status: Joi.string()
     .valid("active", "seen", "dismissed", "done", "archived")
     .required(),
-});
-
-exports.snoozeRecommendationSchema = Joi.object({
-  until: Joi.date().greater("now").required(),
 });

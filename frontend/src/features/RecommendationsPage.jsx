@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import TransactionDetailsModal from "../components/TransactionDetailsModal";
 
 const API_BASE_URL = "http://localhost:5000/api/recommendations";
 const USER_API_URL = "http://localhost:5000/api/user/profile";
@@ -8,7 +10,7 @@ const TABS = [
   { key: "overview", label: "Огляд" },
   { key: "anomalies", label: "Аномалії" },
   { key: "forecast", label: "Прогноз" },
-  { key: "goals", label: "Цілі (Monte-Carlo)" },
+  { key: "goals", label: "Цілі" },
   { key: "patterns", label: "Поведінка витрат" },
 ];
 
@@ -254,7 +256,9 @@ function Metric({ label, value }) {
 
 /* ============ Recommendation Components ============ */
 
-function RecommendationCard({ recommendation, onDismiss, onSnooze, onDone, actionLoading }) {
+function RecommendationCard({ recommendation, onDismiss, onDone, onAction, actionLoading }) {
+  const { primaryAction, secondaryAction } = recommendation;
+  const handleAction = (action) => onAction(action, recommendation);
   return (
     <div className="border border-slate-200 rounded-xl p-4 bg-white">
       <div className="flex items-start justify-between gap-3">
@@ -281,18 +285,25 @@ function RecommendationCard({ recommendation, onDismiss, onSnooze, onDone, actio
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-2 shrink-0">
-          <PrimaryButton>{recommendation.primaryAction?.label || "Переглянути"}</PrimaryButton>
-          <GhostButton>{recommendation.secondaryAction?.label || "Докази"}</GhostButton>
-        </div>
+        {(primaryAction || secondaryAction) && (
+          <div className="flex flex-col gap-2 shrink-0">
+            {primaryAction && (
+              <PrimaryButton onClick={() => handleAction(primaryAction)}>
+                {primaryAction.label}
+              </PrimaryButton>
+            )}
+            {secondaryAction && (
+              <GhostButton onClick={() => handleAction(secondaryAction)}>
+                {secondaryAction.label}
+              </GhostButton>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <GhostButton onClick={() => onDismiss(recommendation._id)} disabled={actionLoading}>
           Відхилити
-        </GhostButton>
-        <GhostButton onClick={() => onSnooze(recommendation._id)} disabled={actionLoading}>
-          Відкласти
         </GhostButton>
         <GhostButton onClick={() => onDone(recommendation._id)} disabled={actionLoading}>
           Виконано
@@ -302,18 +313,18 @@ function RecommendationCard({ recommendation, onDismiss, onSnooze, onDone, actio
   );
 }
 
-function RecommendationGroup({ title, items, onDismiss, onSnooze, onDone, actionLoadingId }) {
+function RecommendationGroup({ title, items, onDismiss, onDone, onAction, actionLoadingId }) {
   return (
-    <div className="border border-slate-200 rounded-xl p-4">
-      <div className="text-sm font-semibold text-slate-900">{title}</div>
-      <div className="mt-3 grid gap-3">
+    <div>
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">{title}</div>
+      <div className="grid gap-3">
         {items.map((item) => (
           <RecommendationCard
             key={item._id}
             recommendation={item}
             onDismiss={onDismiss}
-            onSnooze={onSnooze}
             onDone={onDone}
+            onAction={onAction}
             actionLoading={actionLoadingId === item._id}
           />
         ))}
@@ -324,31 +335,24 @@ function RecommendationGroup({ title, items, onDismiss, onSnooze, onDone, action
 
 /* ============ Tab Sections ============ */
 
-function RecommendationsSection({ groupList, onDismiss, onSnooze, onDone, actionLoadingId }) {
+function RecommendationsSection({ groupList, onDismiss, onDone, onAction, actionLoadingId }) {
+  if (!groupList.length) {
+    return <EmptyState text="Активні рекомендації відсутні." />;
+  }
   return (
-    <Card
-      title="Усі рекомендації"
-      subtitle="Головна сторінка: короткі повідомлення + переходи до пояснень/візуалізацій"
-      right={<span className="text-sm text-slate-500">Груп: {groupList.length}</span>}
-    >
-      {groupList.length > 0 ? (
-        <div className="grid gap-4">
-          {groupList.map((group, index) => (
-            <RecommendationGroup
-              key={`${group.title}-${index}`}
-              title={group.title}
-              items={group.items}
-              onDismiss={onDismiss}
-              onSnooze={onSnooze}
-              onDone={onDone}
-              actionLoadingId={actionLoadingId}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-sm text-slate-500">Активні рекомендації відсутні.</div>
-      )}
-    </Card>
+    <div className="grid gap-6">
+      {groupList.map((group, index) => (
+        <RecommendationGroup
+          key={`${group.title}-${index}`}
+          title={group.title}
+          items={group.items}
+          onDismiss={onDismiss}
+          onDone={onDone}
+          onAction={onAction}
+          actionLoadingId={actionLoadingId}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -796,13 +800,28 @@ function GoalCard({ analysis, currency }) {
   );
 }
 
-function GoalsSection({ goals, currency }) {
+function GoalsSection({ goals, currency, scrollTargetGoalId, onScrollDone }) {
+  useEffect(() => {
+    if (!scrollTargetGoalId) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`goal-${scrollTargetGoalId}`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      }
+      onScrollDone?.();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [scrollTargetGoalId]);
+
   if (!Array.isArray(goals) || !goals.length) return <EmptyState text="Активних фінансових цілей поки немає." />;
 
   return (
     <div className="grid gap-6">
       {goals.map((analysis, i) => (
-        <GoalCard key={analysis.goal?._id || i} analysis={analysis} currency={currency} />
+        <div key={analysis.goal?._id || i} id={`goal-${analysis.goal?._id}`}>
+          <GoalCard analysis={analysis} currency={currency} />
+        </div>
       ))}
     </div>
   );
@@ -862,6 +881,7 @@ function PatternsSection({ data, currency }) {
 /* ============ Main Page ============ */
 
 export default function RecommendationsPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("recs");
   const [overviewPeriod, setOverviewPeriod] = useState("30d");
 
@@ -873,6 +893,8 @@ export default function RecommendationsPage() {
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [recalculateLoading, setRecalculateLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [scrollTargetGoalId, setScrollTargetGoalId] = useState(null);
 
   const getToken = () =>
     localStorage.getItem("token") ||
@@ -962,37 +984,6 @@ export default function RecommendationsPage() {
     }
   };
 
-  const snoozeRecommendation = async (id) => {
-    try {
-      setActionLoadingId(id);
-      setError("");
-
-      const token = getToken();
-      if (!token) throw new Error("Не знайдено токен авторизації.");
-
-      const until = new Date();
-      until.setDate(until.getDate() + 7);
-
-      const response = await fetch(`${API_BASE_URL}/${id}/snooze`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ until: until.toISOString() }),
-      });
-
-      const json = await response.json();
-      if (!response.ok) throw new Error(json.message || "Не вдалося відкласти рекомендацію.");
-
-      await loadData();
-    } catch (err) {
-      setError(err.message || "Помилка при відкладенні рекомендації.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
-
   const recalculateRecommendations = async () => {
     try {
       setRecalculateLoading(true);
@@ -1020,6 +1011,41 @@ export default function RecommendationsPage() {
     }
   };
 
+  const openTransaction = async (id) => {
+    try {
+      const token = getToken();
+      const res = await fetch(`http://localhost:5000/api/transactions/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setSelectedTransaction(data);
+    } catch {
+      setError("Не вдалося завантажити транзакцію.");
+    }
+  };
+
+  const handleRecommendationAction = (action, recommendation) => {
+    if (!action) return;
+    const { actionType, targetType, targetValue } = action;
+    if (actionType === "navigate") {
+      if (targetType === "tab") {
+        const goalId = recommendation?.relatedEntity?.entityId;
+        if (targetValue === "goals" && goalId) {
+          setScrollTargetGoalId(String(goalId));
+        }
+        setActiveTab(targetValue);
+      } else if (targetType === "route") {
+        navigate(targetValue);
+      }
+    } else if (actionType === "open_entity") {
+      if (targetType === "goal") navigate(`/goals/${targetValue}`);
+      else if (targetType === "budget") navigate(`/budgets/${targetValue}`);
+      else if (targetType === "transaction") openTransaction(targetValue);
+      else if (targetType === "category") navigate(`/transactions`);
+    }
+  };
+
   const groupedRecommendations = recommendations.reduce((acc, item) => {
     const key = item.groupKey || "other";
     if (!acc[key]) {
@@ -1029,7 +1055,14 @@ export default function RecommendationsPage() {
     return acc;
   }, {});
 
-  const groupList = Object.values(groupedRecommendations);
+  const GROUP_ORDER = ["immediate_actions", "spending_optimization", "planning_ahead"];
+  const groupList = Object.entries(groupedRecommendations)
+    .sort(([a], [b]) => {
+      const ai = GROUP_ORDER.indexOf(a);
+      const bi = GROUP_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    })
+    .map(([, group]) => group);
 
   const overview = snapshot?.data?.overviewByPeriod?.[overviewPeriod] || null;
   const anomalies = snapshot?.data?.anomalies?.items || [];
@@ -1039,6 +1072,27 @@ export default function RecommendationsPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <TransactionDetailsModal
+        open={!!selectedTransaction}
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+        onEdit={() => {
+          navigate(`/transactions/edit/${selectedTransaction._id}`, { state: { from: "/recommendations" } });
+          setSelectedTransaction(null);
+        }}
+        onConfirmDelete={async () => {
+          try {
+            const token = getToken();
+            await fetch(`http://localhost:5000/api/transactions/${selectedTransaction._id}`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            setSelectedTransaction(null);
+          } catch {
+            setError("Не вдалося видалити транзакцію.");
+          }
+        }}
+      />
       <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
@@ -1051,9 +1105,6 @@ export default function RecommendationsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <GhostButton onClick={loadData} disabled={loading}>
-              Оновити дані
-            </GhostButton>
             <PrimaryButton onClick={recalculateRecommendations} disabled={recalculateLoading}>
               {recalculateLoading ? "Перерахунок..." : "Перерахувати"}
             </PrimaryButton>
@@ -1100,8 +1151,8 @@ export default function RecommendationsPage() {
               <RecommendationsSection
                 groupList={groupList}
                 onDismiss={(id) => updateRecommendationStatus(id, "dismissed")}
-                onSnooze={snoozeRecommendation}
                 onDone={(id) => updateRecommendationStatus(id, "done")}
+                onAction={handleRecommendationAction}
                 actionLoadingId={actionLoadingId}
               />
             )}
@@ -1115,7 +1166,14 @@ export default function RecommendationsPage() {
             )}
             {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} currency={userCurrency} />}
             {activeTab === "forecast" && <ForecastSection forecast={forecast} currency={userCurrency} />}
-            {activeTab === "goals" && <GoalsSection goals={goals} currency={userCurrency} />}
+            {activeTab === "goals" && (
+              <GoalsSection
+                goals={goals}
+                currency={userCurrency}
+                scrollTargetGoalId={scrollTargetGoalId}
+                onScrollDone={() => setScrollTargetGoalId(null)}
+              />
+            )}
             {activeTab === "patterns" && <PatternsSection data={patternsData} currency={userCurrency} />}
           </div>
         )}

@@ -10,7 +10,7 @@ const buildRecommendationsFilter = (userId, query) => {
   if (query.status) {
     filter.status = query.status;
   } else {
-    filter.status = { $ne: "archived" };
+    filter.status = { $in: ["active", "seen"] };
   }
 
   if (query.module) {
@@ -32,17 +32,6 @@ const buildRecommendationsFilter = (userId, query) => {
     ];
   }
 
-  if (!query.includeSnoozed) {
-    filter.$and = [
-      {
-        $or: [
-          { snoozedUntil: null },
-          { snoozedUntil: { $lte: new Date() } },
-        ],
-      },
-    ];
-  }
-
   return filter;
 };
 
@@ -54,7 +43,6 @@ const mapRecommendationToResponse = (recommendation) => {
     module: recommendation.module,
     priority: recommendation.priority,
     status: recommendation.status,
-    snoozedUntil: recommendation.snoozedUntil,
     groupKey: recommendation.groupKey,
     groupLabel: recommendation.groupLabel,
     title: recommendation.title,
@@ -169,41 +157,8 @@ exports.updateRecommendationStatus = async (userId, recommendationId, status) =>
   recommendation.status = status;
   recommendation.lastInteractedAt = new Date();
 
-  if (status === "dismissed" || status === "done" || status === "archived") {
-    recommendation.snoozedUntil = null;
-  }
-
   await recommendation.save();
 
   return mapRecommendationToResponse(recommendation);
 };
 
-exports.snoozeRecommendation = async (userId, recommendationId, until) => {
-  if (!mongoose.Types.ObjectId.isValid(recommendationId)) {
-    throw new Error("Некоректний ідентифікатор рекомендації.");
-  }
-
-  const recommendation = await Recommendation.findOne({
-    _id: recommendationId,
-    userId,
-  });
-
-  if (!recommendation) {
-    throw new Error("Рекомендацію не знайдено.");
-  }
-
-  if (["done", "archived"].includes(recommendation.status)) {
-    throw new Error("Неможливо відкласти завершену або архівовану рекомендацію.");
-  }
-
-  recommendation.snoozedUntil = new Date(until);
-  recommendation.lastInteractedAt = new Date();
-
-  if (recommendation.status === "dismissed") {
-    recommendation.status = "active";
-  }
-
-  await recommendation.save();
-
-  return mapRecommendationToResponse(recommendation);
-};

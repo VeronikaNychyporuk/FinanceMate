@@ -124,12 +124,6 @@ const recommendationSchema = new mongoose.Schema(
       index: true,
     },
 
-    snoozedUntil: {
-      type: Date,
-      default: null,
-      index: true,
-    },
-
     groupKey: {
       type: String,
       enum: {
@@ -199,12 +193,12 @@ const recommendationSchema = new mongoose.Schema(
         {
           type: String,
           enum: {
-            values: ["dismiss", "snooze", "mark_done"],
+            values: ["dismiss", "mark_done"],
             message: "Недійсна доступна дія рекомендації.",
           },
         },
       ],
-      default: ["dismiss", "snooze", "mark_done"],
+      default: ["dismiss", "mark_done"],
     },
 
     context: {

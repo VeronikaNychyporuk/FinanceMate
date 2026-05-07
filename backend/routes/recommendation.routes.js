@@ -10,14 +10,12 @@ const {
   getRecommendationById,
   getRecommendationSnapshot,
   patchRecommendationStatus,
-  patchRecommendationSnooze,
   generateRecommendations,
 } = require("../controllers/recommendation.controller");
 
 const {
   getRecommendationsQuerySchema,
   updateRecommendationStatusSchema,
-  snoozeRecommendationSchema,
 } = require("../validations/recommendation.validation");
 
 router.get(
@@ -50,13 +48,6 @@ router.patch(
   authMiddleware,
   validateRequest(updateRecommendationStatusSchema),
   patchRecommendationStatus
-);
-
-router.patch(
-  "/:id/snooze",
-  authMiddleware,
-  validateRequest(snoozeRecommendationSchema),
-  patchRecommendationSnooze
 );
 
 module.exports = router;

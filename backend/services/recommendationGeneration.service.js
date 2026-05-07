@@ -132,7 +132,7 @@ const groupExpenseByCategory = (transactions) => {
 const buildRecommendationDocument = (userId, partial) => ({
   userId,
   status: "active",
-  availableActions: ["dismiss", "snooze", "mark_done"],
+  availableActions: ["dismiss", "mark_done"],
   generatedAt: new Date(),
   ...partial,
 });
@@ -203,32 +203,35 @@ const buildRecommendations = ({
   );
 
   if (anomalyAnalysis?.topAnomalies?.length) {
-    const actionableAnomaly = anomalyAnalysis.topAnomalies.find(
-      (item) => item.severity === "high" || item.severity === "medium"
+    const highAnomalies = anomalyAnalysis.topAnomalies.filter(
+      (item) => item.severity === "high"
+    );
+    const mediumAnomalies = anomalyAnalysis.topAnomalies.filter(
+      (item) => item.severity === "medium"
     );
 
-    if (actionableAnomaly) {
+    for (const anomaly of highAnomalies) {
       recommendations.push(
         buildRecommendationDocument(userId, {
           type: "anomaly_alert",
           module: "anomalies",
-          priority: actionableAnomaly.severity === "high" ? "high" : "medium",
+          priority: "high",
           groupKey: "immediate_actions",
           groupLabel: GROUP_LABELS.immediate_actions,
           title: "Виявлено нетипову витрату",
-          message: `Система зафіксувала нетипову операцію в категорії «${actionableAnomaly.category}» на суму ${fmtAmount(actionableAnomaly.amount, currency)}. Рекомендується перевірити цю транзакцію.`,
+          message: `Система зафіксувала нетипову операцію в категорії «${anomaly.category}» на суму ${fmtAmount(anomaly.amount, currency)}. Рекомендується перевірити цю транзакцію.`,
           facts: [
-            `Категорія: ${actionableAnomaly.category}`,
-            `Сума: ${fmtAmount(actionableAnomaly.amount, currency)}`,
-            `Anomaly score: ${actionableAnomaly.anomalyScore}/100`,
-            `Рівень: ${actionableAnomaly.severity}`,
+            `Категорія: ${anomaly.category}`,
+            `Сума: ${fmtAmount(anomaly.amount, currency)}`,
+            `Anomaly score: ${anomaly.anomalyScore}/100`,
+            `Рівень: ${anomaly.severity}`,
           ],
-          explanation: actionableAnomaly.reasons.join(" "),
-          relatedEntity: actionableAnomaly.transactionId
+          explanation: anomaly.reasons.join(" "),
+          relatedEntity: anomaly.transactionId
             ? {
                 entityType: "transaction",
-                entityId: actionableAnomaly.transactionId,
-                label: actionableAnomaly.label,
+                entityId: anomaly.transactionId,
+                label: anomaly.label,
               }
             : null,
           primaryAction: {
@@ -237,28 +240,54 @@ const buildRecommendations = ({
             targetType: "tab",
             targetValue: "anomalies",
           },
-          secondaryAction: actionableAnomaly.transactionId
+          secondaryAction: anomaly.transactionId
             ? {
                 label: "Відкрити транзакцію",
                 actionType: "open_entity",
                 targetType: "transaction",
-                targetValue: actionableAnomaly.transactionId.toString(),
+                targetValue: anomaly.transactionId.toString(),
               }
             : null,
-          context: actionableAnomaly,
+          context: anomaly,
+          expiresAt: addDays(new Date(), 7),
+        })
+      );
+    }
+
+    if (highAnomalies.length === 0 && mediumAnomalies.length > 0) {
+      recommendations.push(
+        buildRecommendationDocument(userId, {
+          type: "anomaly_summary",
+          module: "anomalies",
+          priority: "medium",
+          groupKey: "immediate_actions",
+          groupLabel: GROUP_LABELS.immediate_actions,
+          title: "Є підозрілі транзакції",
+          message: `Виявлено ${mediumAnomalies.length} підозрілих транзакцій з середнім рівнем аномальності. Вони не є критичними, але варто їх переглянути.`,
+          facts: [
+            `Підозрілих транзакцій: ${mediumAnomalies.length}`,
+          ],
+          explanation: "Транзакції відхиляються від вашої типової поведінки, але не перевищують критичного порогу.",
+          primaryAction: {
+            label: "Переглянути аномалії",
+            actionType: "navigate",
+            targetType: "tab",
+            targetValue: "anomalies",
+          },
+          secondaryAction: null,
           expiresAt: addDays(new Date(), 7),
         })
       );
     }
   }
 
-  const atRiskGoal = Array.isArray(goalsAnalysis)
-    ? goalsAnalysis.find(
-        (a) => a.status === "active" && a.probabilityByDeadline != null && a.probabilityByDeadline < 65
-      )
-    : null;
+  const atRiskGoals = Array.isArray(goalsAnalysis)
+    ? goalsAnalysis
+        .filter((a) => a.status === "active" && a.probabilityByDeadline != null && a.probabilityByDeadline < 50)
+        .sort((a, b) => a.probabilityByDeadline - b.probabilityByDeadline)
+    : [];
 
-  if (atRiskGoal) {
+  for (const atRiskGoal of atRiskGoals) {
     recommendations.push(
       buildRecommendationDocument(userId, {
         type: "goal_feasibility",
@@ -320,16 +349,16 @@ const buildRecommendations = ({
         ],
         explanation: regularSmallCluster.recommendation,
         primaryAction: {
-          label: "Відкрити патерни",
-          actionType: "navigate",
-          targetType: "tab",
-          targetValue: "patterns",
-        },
-        secondaryAction: {
           label: "Переглянути огляд",
           actionType: "navigate",
           targetType: "tab",
           targetValue: "overview",
+        },
+        secondaryAction: {
+          label: "Відкрити патерни",
+          actionType: "navigate",
+          targetType: "tab",
+          targetValue: "patterns",
         },
         context: regularSmallCluster,
         expiresAt: addDays(new Date(), 21),
@@ -391,12 +420,11 @@ const archiveCurrentRecommendations = async (userId) => {
   await Recommendation.updateMany(
     {
       userId,
-      status: { $ne: "archived" },
+      status: { $in: ["active", "seen"] },
     },
     {
       $set: {
         status: "archived",
-        snoozedUntil: null,
         lastInteractedAt: new Date(),
       },
     }
@@ -449,6 +477,15 @@ exports.generateRecommendationsForUser = async (userId) => {
   const goalsAnalysis = buildGoalsAnalysis(goals, goalTransactions);
   const patterns = buildPatterns(expenseTransactions);
 
+  const actionedRecs = await Recommendation.find({
+    userId,
+    status: { $in: ["dismissed", "done"] },
+  }).select("type relatedEntity");
+
+  const actionedKeys = new Set(
+    actionedRecs.map((r) => `${r.type}:${r.relatedEntity?.entityId?.toString() || "none"}`)
+  );
+
   await archiveCurrentRecommendations(userId);
 
   const recommendationPayload = buildRecommendations({
@@ -458,6 +495,9 @@ exports.generateRecommendationsForUser = async (userId) => {
     goalsAnalysis,
     patterns,
     currency,
+  }).filter((rec) => {
+    const key = `${rec.type}:${rec.relatedEntity?.entityId?.toString() || "none"}`;
+    return !actionedKeys.has(key);
   });
 
   const createdRecommendations = recommendationPayload.length
