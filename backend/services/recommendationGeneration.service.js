@@ -203,12 +203,8 @@ const buildRecommendations = ({
   );
 
   if (anomalyAnalysis?.topAnomalies?.length) {
-    const highAnomalies = anomalyAnalysis.topAnomalies.filter(
-      (item) => item.severity === "high"
-    );
-    const mediumAnomalies = anomalyAnalysis.topAnomalies.filter(
-      (item) => item.severity === "medium"
-    );
+    const highAnomalies = anomalyAnalysis.topAnomalies.filter((a) => a.severity === "high");
+    const mediumAnomalies = anomalyAnalysis.topAnomalies.filter((a) => a.severity === "medium");
 
     for (const anomaly of highAnomalies) {
       recommendations.push(
@@ -254,7 +250,8 @@ const buildRecommendations = ({
       );
     }
 
-    if (highAnomalies.length === 0 && mediumAnomalies.length > 0) {
+    if (mediumAnomalies.length > 0) {
+      const totalActive = anomalyAnalysis.items?.length ?? mediumAnomalies.length;
       recommendations.push(
         buildRecommendationDocument(userId, {
           type: "anomaly_summary",
@@ -263,9 +260,10 @@ const buildRecommendations = ({
           groupKey: "immediate_actions",
           groupLabel: GROUP_LABELS.immediate_actions,
           title: "Є підозрілі транзакції",
-          message: `Виявлено ${mediumAnomalies.length} підозрілих транзакцій з середнім рівнем аномальності. Вони не є критичними, але варто їх переглянути.`,
+          message: `Виявлено ${mediumAnomalies.length} підозрілих транзакцій середнього рівня. Усього активних аномалій: ${totalActive}.`,
           facts: [
-            `Підозрілих транзакцій: ${mediumAnomalies.length}`,
+            `Середнього рівня: ${mediumAnomalies.length}`,
+            ...(highAnomalies.length > 0 ? [`Високого рівня: ${highAnomalies.length}`] : []),
           ],
           explanation: "Транзакції відхиляються від вашої типової поведінки, але не перевищують критичного порогу.",
           primaryAction: {
@@ -466,6 +464,7 @@ exports.generateRecommendationsForUser = async (userId) => {
     expenseTransactions,
     budget,
     now,
+    currency,
   });
 
   const anomalyAnalysis = analyzeAnomalies({

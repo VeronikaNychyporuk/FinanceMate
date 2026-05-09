@@ -408,12 +408,11 @@ function OverviewSection({ data, period, onPeriodChange, currency }) {
               {data.highlights.map((h, i) => (
                 <div
                   key={i}
-                  className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3"
+                  className="border border-slate-200 rounded-xl p-3"
                 >
                   <div className="text-sm text-slate-800">
                     {typeof h === "string" ? h : h.text}
                   </div>
-                  {h.severity ? <SeverityPill severity={h.severity} /> : null}
                 </div>
               ))}
             </div>
@@ -426,54 +425,76 @@ function OverviewSection({ data, period, onPeriodChange, currency }) {
   );
 }
 
-function AnomaliesSection({ anomalies, currency }) {
+function AnomalyCard({ anomaly, currency, recId, actionLoading, onOpenTransaction, onDismiss, onDone }) {
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 bg-white">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-sm font-semibold text-slate-900">{anomaly.category || "Без категорії"}</div>
+            <SeverityPill severity={anomaly.severity} />
+          </div>
+          <div className="text-sm text-slate-600 mt-1">{formatDate(anomaly.date)}</div>
+          {Array.isArray(anomaly.reasons) && anomaly.reasons.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {anomaly.reasons.map((reason, i) => (
+                <span key={i} className="px-2 py-1 text-xs border rounded-full bg-slate-50 text-slate-700">
+                  {reason}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-base font-bold text-slate-900">{formatMoney(anomaly.amount, currency)}</div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {anomaly.transactionId && (
+          <GhostButton onClick={() => onOpenTransaction(anomaly.transactionId)}>
+            Переглянути транзакцію
+          </GhostButton>
+        )}
+        <GhostButton onClick={() => onDismiss(recId, anomaly.transactionId?.toString())} disabled={actionLoading}>
+          Відхилити
+        </GhostButton>
+        <GhostButton onClick={() => onDone(recId, anomaly.transactionId?.toString())} disabled={actionLoading}>
+          Виконано
+        </GhostButton>
+      </div>
+    </div>
+  );
+}
+
+function AnomaliesSection({ anomalies, currency, recommendations, onOpenTransaction, onDismiss, onDone, actionLoadingId }) {
   if (!anomalies.length) return <EmptyState text="Аномалій не виявлено." />;
 
   return (
-    <Card
-      title="Аномалії у витратах"
-      subtitle="Підозрілі або нетипові транзакції з поясненнями"
-      right={<span className="text-sm text-slate-500">Відкриті: {anomalies.length}</span>}
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-500">
-            <tr>
-              <th className="py-2 pr-3">Дата</th>
-              <th className="py-2 pr-3">Категорія</th>
-              <th className="py-2 pr-3">Мерчант</th>
-              <th className="py-2 pr-3">Сума</th>
-              <th className="py-2 pr-3">Причини</th>
-            </tr>
-          </thead>
-          <tbody>
-            {anomalies.map((anomaly, index) => (
-              <tr key={anomaly.transactionId || index} className="border-t border-slate-200">
-                <td className="py-3 pr-3">{formatDate(anomaly.date)}</td>
-                <td className="py-3 pr-3">{anomaly.category || "—"}</td>
-                <td className="py-3 pr-3">{anomaly.merchant || "Без назви"}</td>
-                <td className="py-3 pr-3 font-semibold">{formatMoney(anomaly.amount, currency)}</td>
-                <td className="py-3 pr-3">
-                  <div className="flex flex-wrap gap-2">
-                    <SeverityPill severity={anomaly.severity} />
-                    {(anomaly.reasons || []).slice(0, 2).map((r, i) => (
-                      <span key={i} className="px-2 py-1 text-xs border rounded-full bg-slate-50">
-                        {r}
-                      </span>
-                    ))}
-                    {(anomaly.reasons || []).length > 2 ? (
-                      <span className="px-2 py-1 text-xs border rounded-full bg-slate-50">
-                        +{anomaly.reasons.length - 2}
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Підозрілі транзакції</div>
+        <span className="text-sm text-slate-500">Відкриті: {anomalies.length}</span>
       </div>
-    </Card>
+      <div className="grid gap-3">
+        {anomalies.map((anomaly, index) => {
+          const rec = recommendations.find(
+            (r) => r.relatedEntity?.entityId === anomaly.transactionId?.toString()
+          );
+          return (
+            <AnomalyCard
+              key={anomaly.transactionId || index}
+              anomaly={anomaly}
+              currency={currency}
+              recId={rec?._id}
+              actionLoading={actionLoadingId === rec?._id}
+              onOpenTransaction={onOpenTransaction}
+              onDismiss={onDismiss}
+              onDone={onDone}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -895,6 +916,7 @@ export default function RecommendationsPage() {
   const [error, setError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [scrollTargetGoalId, setScrollTargetGoalId] = useState(null);
+  const [dismissedAnomalyTxIds, setDismissedAnomalyTxIds] = useState(new Set());
 
   const getToken = () =>
     localStorage.getItem("token") ||
@@ -1065,8 +1087,32 @@ export default function RecommendationsPage() {
     .map(([, group]) => group);
 
   const overview = snapshot?.data?.overviewByPeriod?.[overviewPeriod] || null;
-  const anomalies = snapshot?.data?.anomalies?.items || [];
+  const anomalies = (snapshot?.data?.anomalies?.items || [])
+    .filter((a) => !dismissedAnomalyTxIds.has(a.transactionId?.toString()));
   const forecast = snapshot?.data?.forecast || null;
+
+  const liveHighCount = anomalies.filter((a) => a.severity === "high").length;
+  const liveMediumCount = anomalies.filter((a) => a.severity === "medium").length;
+  const liveLowCount = anomalies.filter((a) => a.severity === "low").length;
+  const patchedGroupList = groupList
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => item.type !== "anomaly_summary" || anomalies.length > 0)
+        .map((item) => {
+          if (item.type !== "anomaly_summary") return item;
+          return {
+            ...item,
+            message: `Виявлено ${anomalies.length} аномалій у ваших витратах.`,
+            facts: [
+              ...(liveHighCount > 0 ? [`Високий рівень: ${liveHighCount}`] : []),
+              ...(liveMediumCount > 0 ? [`Середній рівень: ${liveMediumCount}`] : []),
+              ...(liveLowCount > 0 ? [`Низький рівень: ${liveLowCount}`] : []),
+            ],
+          };
+        }),
+    }))
+    .filter((group) => group.items.length > 0);
   const goals = snapshot?.data?.goals || [];
   const patternsData = snapshot?.data?.patterns || null;
 
@@ -1149,9 +1195,21 @@ export default function RecommendationsPage() {
           <div className="mt-6 grid gap-4">
             {activeTab === "recs" && (
               <RecommendationsSection
-                groupList={groupList}
-                onDismiss={(id) => updateRecommendationStatus(id, "dismissed")}
-                onDone={(id) => updateRecommendationStatus(id, "done")}
+                groupList={patchedGroupList}
+                onDismiss={(id) => {
+                  const rec = recommendations.find((r) => r._id === id);
+                  if (rec?.module === "anomalies" && rec?.relatedEntity?.entityId) {
+                    setDismissedAnomalyTxIds((prev) => new Set([...prev, rec.relatedEntity.entityId.toString()]));
+                  }
+                  updateRecommendationStatus(id, "dismissed");
+                }}
+                onDone={(id) => {
+                  const rec = recommendations.find((r) => r._id === id);
+                  if (rec?.module === "anomalies" && rec?.relatedEntity?.entityId) {
+                    setDismissedAnomalyTxIds((prev) => new Set([...prev, rec.relatedEntity.entityId.toString()]));
+                  }
+                  updateRecommendationStatus(id, "done");
+                }}
                 onAction={handleRecommendationAction}
                 actionLoadingId={actionLoadingId}
               />
@@ -1164,7 +1222,23 @@ export default function RecommendationsPage() {
                 currency={userCurrency}
               />
             )}
-            {activeTab === "anomalies" && <AnomaliesSection anomalies={anomalies} currency={userCurrency} />}
+            {activeTab === "anomalies" && (
+              <AnomaliesSection
+                anomalies={anomalies}
+                currency={userCurrency}
+                recommendations={recommendations}
+                onOpenTransaction={openTransaction}
+                onDismiss={(id, txId) => {
+                  if (txId) setDismissedAnomalyTxIds((prev) => new Set([...prev, txId]));
+                  if (id) updateRecommendationStatus(id, "dismissed");
+                }}
+                onDone={(id, txId) => {
+                  if (txId) setDismissedAnomalyTxIds((prev) => new Set([...prev, txId]));
+                  if (id) updateRecommendationStatus(id, "done");
+                }}
+                actionLoadingId={actionLoadingId}
+              />
+            )}
             {activeTab === "forecast" && <ForecastSection forecast={forecast} currency={userCurrency} />}
             {activeTab === "goals" && (
               <GoalsSection

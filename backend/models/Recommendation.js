@@ -78,6 +78,7 @@ const recommendationSchema = new mongoose.Schema(
         values: [
           "spending_optimization",
           "anomaly_alert",
+          "anomaly_summary",
           "balance_warning",
           "budget_risk",
           "goal_adjustment",

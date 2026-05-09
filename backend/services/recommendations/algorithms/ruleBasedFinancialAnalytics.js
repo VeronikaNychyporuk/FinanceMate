@@ -60,7 +60,86 @@ const groupExpenseByCategory = (transactions) => {
     .sort((a, b) => b.amount - a.amount);
 };
 
-const buildOverviewPeriod = (transactions, days, now = new Date()) => {
+const buildOverviewHighlights = (allTransactions, periodTransactions, income, expense, net, days, now, currency) => {
+  const highlights = [];
+
+  if (periodTransactions.length === 0) {
+    return [{ severity: "low", text: `За ${days} днів не зафіксовано жодної транзакції.` }];
+  }
+
+  const expenseTxs = periodTransactions.filter((tx) => tx.type === "expense");
+  const fmt = (amount) => `${Math.round(amount)} ${currency}`;
+
+  // 1. Порівняння з попередніми N днями
+  const prevTo = addDays(startOfDay(now), -days);
+  const prevFrom = addDays(prevTo, -(days - 1));
+  const prevTransactions = filterTransactionsByPeriod(allTransactions, prevFrom, prevTo);
+  const prevExpense = sumTransactionsByType(prevTransactions, "expense");
+  if (prevExpense > 0 && expense > 0) {
+    const pctChange = Math.round(((expense - prevExpense) / prevExpense) * 100);
+    const absChange = fmt(Math.abs(expense - prevExpense));
+    if (Math.abs(pctChange) >= 5) {
+      highlights.push({
+        severity: pctChange > 30 ? "high" : pctChange > 10 ? "medium" : "low",
+        text:
+          pctChange > 0
+            ? `Витрати зросли на ${pctChange}% порівняно з попередніми ${days} днями (+${absChange})`
+            : `Витрати знизились на ${Math.abs(pctChange)}% порівняно з попередніми ${days} днями (−${absChange})`,
+      });
+    }
+  }
+
+  // 2. Найбільша разова транзакція
+  if (expenseTxs.length > 0) {
+    const biggest = expenseTxs.reduce((max, tx) =>
+      tx.amountInBaseCurrency > max.amountInBaseCurrency ? tx : max
+    );
+    const categoryName = biggest.categoryId?.name || "Без категорії";
+    const dateLabel = new Date(biggest.date).toLocaleDateString("uk-UA", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+    highlights.push({
+      severity: "low",
+      text: `Найбільша разова витрата: ${fmt(biggest.amountInBaseCurrency)} — ${categoryName}, ${dateLabel}`,
+    });
+  }
+
+  // 3. Найдорожчий день
+  if (expenseTxs.length > 1) {
+    const byDay = {};
+    expenseTxs.forEach((tx) => {
+      const key = new Date(tx.date).toDateString();
+      byDay[key] = (byDay[key] || 0) + tx.amountInBaseCurrency;
+    });
+    const [topDay, topDayAmount] = Object.entries(byDay).reduce(
+      (max, entry) => (entry[1] > max[1] ? entry : max),
+      ["", 0]
+    );
+    if (topDay) {
+      const dayLabel = new Date(topDay).toLocaleDateString("uk-UA", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+      highlights.push({
+        severity: "low",
+        text: `Пік витрат: ${dayLabel} — ${fmt(topDayAmount)} за один день`,
+      });
+    }
+  }
+
+  // 4. Середньоденні витрати
+  if (expense > 0) {
+    highlights.push({
+      severity: "low",
+      text: `В середньому витрачається ${fmt(expense / days)} на день`,
+    });
+  }
+
+  return highlights.slice(0, 4);
+};
+
+const buildOverviewPeriod = (transactions, days, now = new Date(), currency = "UAH") => {
   const { from, to } = buildDateRange(days, now);
   const periodTransactions = filterTransactionsByPeriod(transactions, from, to);
 
@@ -76,6 +155,10 @@ const buildOverviewPeriod = (transactions, days, now = new Date()) => {
     share: expense > 0 ? round((item.amount / expense) * 100) : 0,
     count: item.count,
   }));
+
+  const highlights = buildOverviewHighlights(
+    transactions, periodTransactions, income, expense, net, days, now, currency
+  );
 
   return {
     label: `${days} днів`,
@@ -94,6 +177,7 @@ const buildOverviewPeriod = (transactions, days, now = new Date()) => {
       share: expense > 0 ? round((item.amount / expense) * 100) : 0,
     })),
     topDrivers,
+    highlights,
   };
 };
 
@@ -311,12 +395,13 @@ const analyzeRuleBasedFinancials = ({
   expenseTransactions,
   budget,
   now = new Date(),
+  currency = "UAH",
 }) => {
   const dataSufficiency = detectDataSufficiency(transactions);
 
-  const overview7 = buildOverviewPeriod(transactions, 7, now);
-  const overview30 = buildOverviewPeriod(transactions, 30, now);
-  const overview90 = buildOverviewPeriod(transactions, 90, now);
+  const overview7 = buildOverviewPeriod(transactions, 7, now, currency);
+  const overview30 = buildOverviewPeriod(transactions, 30, now, currency);
+  const overview90 = buildOverviewPeriod(transactions, 90, now, currency);
 
   const comparison30 = buildComparisonPeriod(transactions, 30, now);
   const budgetAnalysis = buildMonthlyBudgetAnalysis(budget, expenseTransactions, now);
