@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TransactionDetailsModal from "../components/TransactionDetailsModal";
 
@@ -527,27 +527,66 @@ function ConfidenceBadge({ level }) {
   );
 }
 
-function ForecastChart({ points, width = 520, height = 150 }) {
+function fmtAxisValue(val) {
+  const abs = Math.abs(val);
+  if (abs >= 10000) return `${(val / 1000).toFixed(0)}K`;
+  if (abs >= 1000) return `${(val / 1000).toFixed(1)}K`;
+  return val.toFixed(0);
+}
+
+function findZeroCrossing(points) {
+  for (let i = 1; i < points.length; i++) {
+    if (points[i - 1].balance >= 0 && points[i].balance < 0) {
+      const t = points[i - 1].balance / (points[i - 1].balance - points[i].balance);
+      const d1 = new Date(points[i - 1].date).getTime();
+      const d2 = new Date(points[i].date).getTime();
+      return { t, date: new Date(d1 + t * (d2 - d1)), idx: i };
+    }
+  }
+  return null;
+}
+
+function ForecastChart({ points, currency = "UAH", width = 580, height = 240 }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const svgRef = useRef(null);
+
   if (!Array.isArray(points) || points.length === 0) {
     return <div className="text-sm text-slate-500 py-4">Недостатньо даних для графіка</div>;
   }
 
-  const padding = 14;
+  const leftPad = 56;
+  const rightPad = 14;
+  const topPad = 18;
+  const bottomPad = 28;
+
   const balances = points.map((p) => p.balance);
-  const lowers   = points.map((p) => p.lower ?? p.balance);
-  const uppers   = points.map((p) => p.upper ?? p.balance);
-
+  const lowers = points.map((p) => p.lower ?? p.balance);
+  const uppers = points.map((p) => p.upper ?? p.balance);
   const allValues = [...balances, ...lowers, ...uppers];
-  const minY = Math.min(...allValues);
-  const maxY = Math.max(...allValues);
-  const span = maxY - minY || 1;
+  let rawMin = Math.min(...allValues);
+  let rawMax = Math.max(...allValues);
+  const rawRange = rawMax - rawMin || 1;
+  const minY = rawMin - rawRange * 0.05;
+  const maxY = rawMax + rawRange * 0.05;
+  const span = maxY - minY;
 
-  const toX = (i) => padding + (i * (width - padding * 2)) / Math.max(1, points.length - 1);
-  const toY = (y) => height - padding - ((y - minY) * (height - padding * 2)) / span;
+  const cL = leftPad;
+  const cR = width - rightPad;
+  const cT = topPad;
+  const cB = height - bottomPad;
+  const cW = cR - cL;
+  const cH = cB - cT;
 
-  const mainPath = points
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.balance).toFixed(1)}`)
-    .join(" ");
+  const toX = (i) => cL + (i * cW) / Math.max(1, points.length - 1);
+  const toY = (y) => cB - ((y - minY) * cH) / span;
+
+  const gridTicks = Array.from({ length: 5 }, (_, i) => {
+    const val = minY + (i * span) / 4;
+    return { val, y: toY(val) };
+  });
+
+  const showZero = minY < 0 && maxY > 0;
+  const zeroY = toY(0);
 
   const hasBands = points.some((p) => p.lower != null);
   let bandPath = null;
@@ -557,35 +596,285 @@ function ForecastChart({ points, width = 520, height = 150 }) {
     bandPath = `${upper} ${lower} Z`;
   }
 
-  const zeroY = toY(0);
-  const showZero = minY < 0 && maxY > 0;
+  const mainPath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.balance).toFixed(1)}`)
+    .join(" ");
 
-  const labels = points.map((p) => p.date ? new Date(p.date).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" }) : "");
+  const crossing = findZeroCrossing(points);
+  let crossX = null;
+  let crossLabel = null;
+  if (crossing) {
+    const { t, date, idx } = crossing;
+    crossX = toX(idx - 1) + t * (toX(idx) - toX(idx - 1));
+    crossLabel = date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" });
+  }
+
+  const labels = points.map((p) =>
+    p.date ? new Date(p.date).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" }) : ""
+  );
+  const minIdx = balances.indexOf(Math.min(...balances));
+  const lastBal = balances[balances.length - 1];
+
+  const handleMouseMove = (e) => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+    const rect = svgEl.getBoundingClientRect();
+    const svgX = (e.clientX - rect.left) * (width / rect.width);
+    let closest = 0;
+    let minDx = Infinity;
+    points.forEach((_, i) => {
+      const dx = Math.abs(toX(i) - svgX);
+      if (dx < minDx) { minDx = dx; closest = i; }
+    });
+    setHoveredIdx(closest);
+  };
+
+  const tooltipEl = (() => {
+    if (hoveredIdx === null) return null;
+    const p = points[hoveredIdx];
+    const px = toX(hoveredIdx);
+    const py = toY(p.balance);
+    const dateStr = p.date
+      ? new Date(p.date).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : "";
+    const balStr = formatMoney(p.balance, currency);
+    const hasInterval = p.lower != null && p.upper != null;
+    const boxW = 154;
+    const boxH = hasInterval ? 74 : 46;
+    let boxX = px + 12;
+    if (boxX + boxW > cR) boxX = px - boxW - 12;
+    let boxY = py - boxH / 2;
+    if (boxY < cT + 2) boxY = cT + 2;
+    if (boxY + boxH > cB - 2) boxY = cB - boxH - 2;
+    const dotColor = p.balance < 0 ? "#ef4444" : "#4f46e5";
+
+    return (
+      <g>
+        <line x1={px} y1={cT} x2={px} y2={cB} stroke="#94a3b8" strokeWidth="1" strokeDasharray="3 3" />
+        <circle cx={px} cy={py} r="5" fill={dotColor} stroke="white" strokeWidth="2" />
+        <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="white" stroke="#e2e8f0" strokeWidth="1" />
+        <text x={boxX + 10} y={boxY + 16} fontSize="11" fill="#64748b">{dateStr}</text>
+        <text x={boxX + 10} y={boxY + 33} fontSize="13" fill={p.balance < 0 ? "#ef4444" : "#0f172a"} fontWeight="600">{balStr}</text>
+        {hasInterval && (
+          <>
+            <text x={boxX + 10} y={boxY + 50} fontSize="10" fill="#94a3b8">Можливий діапазон:</text>
+            <text x={boxX + 10} y={boxY + 62} fontSize="10" fill="#94a3b8">
+              {`${formatMoney(p.lower, currency)} — ${formatMoney(p.upper, currency)}`}
+            </text>
+          </>
+        )}
+      </g>
+    );
+  })();
 
   return (
-    <div className="w-full overflow-x-auto">
-      <svg width={width} height={height} className="block">
-        <rect x="0" y="0" width={width} height={height} fill="white" />
-        {[0, 1, 2, 3, 4].map((i) => {
-          const y = padding + (i * (height - padding * 2)) / 4;
-          return <line key={i} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
-        })}
+    <div className="w-full">
+      <svg
+        ref={svgRef}
+        width="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        className="block cursor-crosshair"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredIdx(null)}
+      >
+        <defs>
+          <clipPath id="fc-clip">
+            <rect x={cL} y={cT} width={cW} height={cH} />
+          </clipPath>
+        </defs>
+
+        {/* Background zones */}
+        {maxY > 0 && (
+          <rect x={cL} y={cT} width={cW} height={showZero ? Math.max(0, zeroY - cT) : cH} fill="#f0fdf4" />
+        )}
+        {minY < 0 && (
+          <rect x={cL} y={showZero ? zeroY : cT} width={cW} height={showZero ? Math.max(0, cB - zeroY) : cH} fill="#fef2f2" />
+        )}
+
+        {/* Grid lines + Y-axis labels */}
+        {gridTicks.map(({ val, y }, i) => (
+          <g key={i}>
+            <line x1={cL} y1={y} x2={cR} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+            <text x={cL - 6} y={y + 4} fontSize="11" fill="#94a3b8" textAnchor="end">
+              {fmtAxisValue(val)}
+            </text>
+          </g>
+        ))}
+
+        {/* Zero line */}
         {showZero && (
-          <line x1={padding} y1={zeroY} x2={width - padding} y2={zeroY} stroke="#ef4444" strokeWidth="1" strokeDasharray="4 3" />
+          <g>
+            <line x1={cL} y1={zeroY} x2={cR} y2={zeroY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4 3" />
+            <text x={cL - 6} y={zeroY + 4} fontSize="11" fill="#ef4444" textAnchor="end" fontWeight="600">0</text>
+          </g>
         )}
-        {hasBands && (
-          <path d={bandPath} fill="#6366f1" fillOpacity="0.1" stroke="none" />
+
+        {/* Confidence band */}
+        {hasBands && bandPath && (
+          <path d={bandPath} fill="#6366f1" fillOpacity="0.12" stroke="none" clipPath="url(#fc-clip)" />
         )}
-        <path d={mainPath} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinejoin="round" />
-        <text x={padding} y={padding - 2} fontSize="10" fill="#94a3b8">{maxY.toFixed(0)}</text>
-        <text x={padding} y={height - 2} fontSize="10" fill="#94a3b8">{minY.toFixed(0)}</text>
+
+        {/* Main forecast line */}
+        <path d={mainPath} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinejoin="round" clipPath="url(#fc-clip)" />
+
+        {/* Zero crossing vertical marker */}
+        {crossX != null && hoveredIdx === null && (
+          <g>
+            <line x1={crossX} y1={cT} x2={crossX} y2={cB} stroke="#ef4444" strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.7" />
+            <rect x={crossX - 19} y={cT - 1} width="38" height="13" rx="3" fill="#fef2f2" stroke="#ef4444" strokeWidth="0.5" />
+            <text x={crossX} y={cT + 9} fontSize="9" fill="#ef4444" textAnchor="middle" fontWeight="600">{crossLabel}</text>
+          </g>
+        )}
+
+        {/* Min balance dot (if negative, when not hovering) */}
+        {balances[minIdx] < 0 && hoveredIdx === null && (
+          <circle cx={toX(minIdx)} cy={toY(balances[minIdx])} r="4.5" fill="#ef4444" stroke="white" strokeWidth="1.5" clipPath="url(#fc-clip)" />
+        )}
+
+        {/* Start dot (when not hovering) */}
+        {hoveredIdx === null && (
+          <circle cx={toX(0)} cy={toY(balances[0])} r="4" fill="#4f46e5" stroke="white" strokeWidth="1.5" />
+        )}
+
+        {/* End dot (when not hovering) */}
+        {hoveredIdx === null && (
+          <circle
+            cx={toX(points.length - 1)}
+            cy={toY(lastBal)}
+            r="4"
+            fill={lastBal < 0 ? "#ef4444" : "#4f46e5"}
+            stroke="white"
+            strokeWidth="1.5"
+          />
+        )}
+
+        {/* X-axis date labels */}
+        {(() => {
+          const midIdx = Math.floor((points.length - 1) / 2);
+          const lastIdx = points.length - 1;
+          return (
+            <>
+              <text x={toX(0)} y={height - 6} fontSize="11" fill="#94a3b8" textAnchor="start">{labels[0]}</text>
+              {midIdx > 0 && midIdx < lastIdx && (
+                <text x={toX(midIdx)} y={height - 6} fontSize="11" fill="#94a3b8" textAnchor="middle">{labels[midIdx]}</text>
+              )}
+              <text x={toX(lastIdx)} y={height - 6} fontSize="11" fill="#94a3b8" textAnchor="end">{labels[lastIdx]}</text>
+            </>
+          );
+        })()}
+
+        {/* Interactive tooltip (rendered last so it's on top) */}
+        {tooltipEl}
       </svg>
-      <div className="flex justify-between text-xs text-slate-500 mt-1">
-        <span>{labels[0]}</span>
-        <span>{labels[Math.floor((labels.length - 1) / 2)]}</span>
-        <span>{labels[labels.length - 1]}</span>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mt-3 text-sm text-slate-500">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-5 border-t-2 border-indigo-600" />
+          Прогноз балансу
+        </span>
+        {hasBands && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-4 h-3 rounded bg-indigo-200 opacity-70" />
+            Можливий діапазон балансу
+          </span>
+        )}
+        {showZero && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-5 border-t border-dashed border-red-500" />
+            Нульовий баланс
+          </span>
+        )}
       </div>
     </div>
+  );
+}
+
+function ForecastSummaryCard({ label, value, valueColor, sub }) {
+  return (
+    <div className="border border-slate-200 rounded-xl p-3 bg-white">
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
+      <div className={cn("text-base font-bold leading-tight", valueColor || "text-slate-900")}>{value}</div>
+      {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+function ForecastInsight({ forecast, currency }) {
+  const series = forecast.seriesBalance || [];
+  if (!series.length) return null;
+
+  const startBal = series[0]?.balance ?? 0;
+  const endBal = series[series.length - 1]?.balance ?? 0;
+  const avgDaily = forecast.averageDailyNet ?? 0;
+  const minBal = Math.min(...series.map((p) => p.balance));
+  const crossing = findZeroCrossing(series);
+
+  const isNegativeTrend = avgDaily < 0;
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <ForecastSummaryCard
+          label="Поточний баланс"
+          value={formatMoney(startBal, currency)}
+          valueColor={startBal >= 0 ? "text-emerald-700" : "text-red-600"}
+        />
+        <ForecastSummaryCard
+          label={`Через ${forecast.horizonDays || 30} днів`}
+          value={formatMoney(endBal, currency)}
+          valueColor={endBal >= 0 ? "text-emerald-700" : "text-red-600"}
+          sub="прогнозований баланс"
+        />
+        <ForecastSummaryCard
+          label="Щоденна зміна"
+          value={`${avgDaily >= 0 ? "+" : ""}${formatMoney(avgDaily, currency)}`}
+          valueColor={avgDaily >= 0 ? "text-emerald-700" : "text-red-600"}
+          sub="середній приріст / спад"
+        />
+        {crossing ? (
+          <ForecastSummaryCard
+            label="Баланс стане від'ємним"
+            value={crossing.date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" })}
+            valueColor="text-red-600"
+            sub="за поточних витрат"
+          />
+        ) : (
+          <ForecastSummaryCard
+            label="Мінімальний баланс"
+            value={formatMoney(minBal, currency)}
+            valueColor={minBal < 0 ? "text-red-600" : "text-slate-900"}
+            sub="протягом прогнозу"
+          />
+        )}
+      </div>
+
+      <div className={cn(
+        "rounded-xl border px-4 py-3 text-sm",
+        isNegativeTrend ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"
+      )}>
+        {isNegativeTrend ? (
+          crossing ? (
+            <>
+              <b>Увага:</b> за поточними темпами баланс стане від'ємним{" "}
+              <b>{crossing.date.toLocaleDateString("uk-UA", { day: "2-digit", month: "long" })}</b>.
+              {" "}Щоденний відтік: <b>{formatMoney(Math.abs(avgDaily), currency)}</b>.
+              {" "}Рекомендуємо скоротити витрати або збільшити надходження.
+            </>
+          ) : (
+            <>
+              Баланс поступово знижується. Щоденна зміна:{" "}
+              <b>{formatMoney(avgDaily, currency)}</b>. Варто переглянути витрати.
+            </>
+          )
+        ) : (
+          <>
+            Фінансова ситуація стабільна. Щоденний приріст:{" "}
+            <b>{formatMoney(avgDaily, currency)}</b>. Продовжуйте в тому ж темпі.
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -604,44 +893,28 @@ function ForecastSection({ forecast, currency }) {
   }
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
+    <div className="grid gap-4">
+      <ForecastInsight forecast={forecast} currency={currency} />
+
       <Card
         title="Прогноз балансу"
         subtitle={`Очікувана динаміка на ${forecast.horizonDays || 0} днів вперед`}
       >
-        <ForecastChart points={forecast.seriesBalance || []} />
-        {forecast.averageDailyNet != null ? (
-          <div className="text-sm text-slate-600 mt-3">
-            Середній щоденний приріст балансу:{" "}
-            <b className={forecast.averageDailyNet < 0 ? "text-red-600" : "text-emerald-700"}>
-              {formatMoney(forecast.averageDailyNet, currency)}
-            </b>
-          </div>
-        ) : null}
+        <ForecastChart points={forecast.seriesBalance || []} currency={currency} width={580} height={240} />
       </Card>
 
-      <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
-        {(forecast.risks || []).length ? (
+      {(forecast.risks || []).length ? (
+        <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
           <div className="grid gap-2">
             {forecast.risks.map((r, i) => (
-              <div
-                key={i}
-                className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3"
-              >
-                <div>
-                  {r.title ? (
-                    <div className="text-sm font-semibold text-slate-900">{r.title}</div>
-                  ) : null}
-                  <div className="text-sm text-slate-800 mt-0.5">{r.message}</div>
-                </div>
-                <SeverityPill severity={r.level} />
+              <div key={i} className="border border-slate-200 rounded-xl p-3">
+                {r.title && <div className="text-sm font-semibold text-slate-900">{r.title}</div>}
+                <div className="text-sm text-slate-600 mt-0.5">{r.message}</div>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-sm text-slate-500">Ризики відсутні.</div>
-        )}
-      </Card>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -708,115 +981,148 @@ function GoalCard({ analysis, currency }) {
   const comment = analysis.probabilityByDeadline != null
     ? probabilityComment(analysis.probabilityByDeadline)
     : null;
+  const probPct = analysis.probabilityByDeadline ?? null;
+  const probColor = probPct == null ? "text-slate-500"
+    : probPct >= 60 ? "text-emerald-600"
+    : probPct >= 30 ? "text-amber-500"
+    : "text-red-500";
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
-      {/* Основна картка */}
-      <Card
-        title={`Ціль: ${g.name}`}
-        subtitle={`Накопичено ${formatMoney(g.currentAmount, currency)} з ${formatMoney(g.targetAmount, currency)} · Дедлайн: ${formatDate(g.deadline)}`}
-        right={<span className="text-sm text-slate-500">Прогрес: {progressPct}%</span>}
-      >
-        <Gauge value={analysis.probabilityByDeadline} />
-        {comment && <div className={cn("mt-2 text-sm font-medium", comment.color)}>{comment.text}</div>}
-
-        <div className="mt-3 grid gap-1 text-sm text-slate-600">
-          {g.monthsLeft != null && <div>До дедлайну: <b>{g.monthsLeft} міс.</b></div>}
-          {g.requiredMonthlySavings != null && (
-            <div>Щомісяця потрібно: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
-          )}
-          {analysis.forecastedMonthly != null && (
-            <div>
-              Прогноз ваших накопичень:{" "}
-              <b className={analysis.forecastedMonthly >= g.requiredMonthlySavings ? "text-emerald-700" : "text-red-600"}>
-                {formatMoney(analysis.forecastedMonthly, currency)} / міс.
-              </b>
-              {analysis.trend && <span className="text-xs text-slate-400 ml-1">({analysis.trend} тренд)</span>}
+    <div className="border border-slate-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+      {/* Заголовок цілі */}
+      <div className="px-5 pt-5 pb-4 border-b border-slate-100">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div className="text-base font-semibold text-slate-900">Ціль: {g.name}</div>
+          {probPct != null && (
+            <div className="shrink-0 flex items-baseline gap-2">
+              <span className="text-sm text-slate-500">Ймовірність:</span>
+              <span className={cn("text-2xl font-bold leading-none", probColor)}>
+                {probPct.toFixed(0)}%
+              </span>
             </div>
           )}
         </div>
+        <div className="mt-1 text-sm text-slate-500">
+          Накопичено {formatMoney(g.currentAmount, currency)} з {formatMoney(g.targetAmount, currency)}
+          <span className="mx-3 text-slate-300">·</span>
+          Дедлайн: {formatDate(g.deadline)}
+        </div>
+        <div className="mt-3">
+          <div className="flex justify-between text-xs text-slate-500 mb-1">
+            <span>Прогрес</span>
+            <span>{progressPct}%</span>
+          </div>
+          <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-slate-800 rounded-full" style={{ width: `${Math.min(100, progressPct)}%` }} />
+          </div>
+        </div>
+      </div>
 
-        {/* Коли буде досягнута ціль */}
-        {(td.optimistic || td.likely || td.pessimistic) && (() => {
-          const isAfterDeadline = (m) => m != null && g.monthsLeft != null && m > g.monthsLeft;
-          const allAfter = isAfterDeadline(td.optimistic?.months) &&
-                           isAfterDeadline(td.likely?.months) &&
-                           isAfterDeadline(td.pessimistic?.months);
-          const rowColor = (m) =>
-            !isAfterDeadline(m) ? "text-emerald-700" : "text-rose-600";
-
-          return (
-            <div className="mt-4 border-t border-slate-100 pt-3 grid gap-1.5">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                За скільки досягнеш цілі
+      {/* Тіло: дві секції */}
+      <div className="flex flex-col md:flex-row items-start">
+        {/* Ліва секція */}
+        <div className="p-5 md:w-1/2 md:border-r border-slate-100">
+          {comment && <div className={cn("mb-3 text-sm font-medium", comment.color)}>{comment.text}</div>}
+          <div className="grid gap-1.5 text-sm text-slate-600">
+            {g.monthsLeft != null && <div>До дедлайну: <b>{g.monthsLeft} міс.</b></div>}
+            {g.requiredMonthlySavings != null && (
+              <div>Щомісяця потрібно: <b>{formatMoney(g.requiredMonthlySavings, currency)}</b></div>
+            )}
+            {analysis.forecastedMonthly != null && (
+              <div>
+                Прогноз ваших накопичень:{" "}
+                <b className={analysis.forecastedMonthly >= g.requiredMonthlySavings ? "text-emerald-700" : "text-red-600"}>
+                  {formatMoney(analysis.forecastedMonthly, currency)} / міс.
+                </b>
+                {analysis.trend && <span className="text-xs text-slate-400 ml-1">({analysis.trend} тренд)</span>}
               </div>
-              {allAfter && g.monthsLeft != null && (
-                <div className="text-s text-rose-600 mb-1">
-                  Усі сценарії виходять за межі дедлайну ({g.monthsLeft} міс.). Розгляньте збільшення внесків або перенесення дедлайну.
-                </div>
-              )}
-              {td.optimistic?.label && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">У кращому сценарії</span>
-                  <b className={rowColor(td.optimistic.months)}>{td.optimistic.label}</b>
-                </div>
-              )}
-              {td.likely?.label && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Найімовірніше</span>
-                  <b className={rowColor(td.likely.months)}>{td.likely.label}</b>
-                </div>
-              )}
-              {td.pessimistic?.label && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">У гіршому сценарії</span>
-                  <b className={rowColor(td.pessimistic.months)}>{td.pessimistic.label}</b>
-                </div>
-              )}
-              {!td.optimistic?.label && !td.likely?.label && !td.pessimistic?.label && (
-                <div className="text-sm text-slate-500">За поточного темпу ціль важко досягти — спробуйте збільшити накопичення.</div>
-              )}
-            </div>
-          );
-        })()}
-      </Card>
+            )}
+          </div>
 
-      {/* Сценарії */}
-      {analysis.whatIf?.length ? (() => {
-        const baseMonths = analysis.whatIf[0]?.medianMonths;
-        return (
-          <Card title="Що буде, якщо змінити темп заощаджень?">
-            <div className="grid gap-2">
-              {analysis.whatIf.map((w, i) => {
-                const diff = baseMonths != null && w.medianMonths != null && i !== 0
-                  ? w.medianMonths - baseMonths
-                  : null;
-                return (
-                  <div key={i} className={cn(
-                    "border rounded-xl p-3",
-                    i === 0 ? "border-slate-300 bg-slate-50" : "border-slate-200"
-                  )}>
-                    <div className="text-sm font-semibold text-slate-800">{w.label}</div>
-                    <div className="text-sm text-slate-600 mt-0.5">
-                      Внесок: <b>{formatMoney(w.monthlyContribution, currency)} / міс.</b>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {w.medianLabel
-                        ? `Найімовірніше досягнеш за ${w.medianLabel}`
-                        : "За такого темпу ціль недосяжна у прийнятний строк"}
-                      {diff != null && (
-                        <span className={cn("ml-2 font-medium", diff < 0 ? "text-emerald-600" : "text-rose-600")}>
-                          ({diff < 0 ? `на ${Math.abs(diff)} міс. швидше` : `на ${diff} міс. повільніше`})
-                        </span>
-                      )}
-                    </div>
+          {(td.optimistic || td.likely || td.pessimistic) && (() => {
+            const isAfterDeadline = (m) => m != null && g.monthsLeft != null && m > g.monthsLeft;
+            const allAfter = isAfterDeadline(td.optimistic?.months) &&
+                             isAfterDeadline(td.likely?.months) &&
+                             isAfterDeadline(td.pessimistic?.months);
+            const rowColor = (m) =>
+              !isAfterDeadline(m) ? "text-emerald-700" : "text-rose-600";
+
+            return (
+              <div className="mt-4 border-t border-slate-100 pt-3 grid gap-1.5">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                  За скільки досягнеш цілі
+                </div>
+                {allAfter && g.monthsLeft != null && (
+                  <div className="text-s text-rose-600 mb-1">
+                    Усі сценарії виходять за межі дедлайну ({g.monthsLeft} міс.). Розгляньте збільшення внесків або перенесення дедлайну.
                   </div>
-                );
-              })}
-            </div>
-          </Card>
-        );
-      })() : null}
+                )}
+                {td.optimistic?.label && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">У кращому сценарії</span>
+                    <b className={rowColor(td.optimistic.months)}>{td.optimistic.label}</b>
+                  </div>
+                )}
+                {td.likely?.label && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Найімовірніше</span>
+                    <b className={rowColor(td.likely.months)}>{td.likely.label}</b>
+                  </div>
+                )}
+                {td.pessimistic?.label && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">У гіршому сценарії</span>
+                    <b className={rowColor(td.pessimistic.months)}>{td.pessimistic.label}</b>
+                  </div>
+                )}
+                {!td.optimistic?.label && !td.likely?.label && !td.pessimistic?.label && (
+                  <div className="text-sm text-slate-500">За поточного темпу ціль важко досягти — спробуйте збільшити накопичення.</div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Права секція: whatIf */}
+        <div className="p-5 md:w-1/2">
+          {analysis.whatIf?.length ? (() => {
+            const baseMonths = analysis.whatIf[0]?.medianMonths;
+            return (
+              <>
+                <div className="text-sm font-semibold text-slate-800 mb-3">Що буде, якщо змінити темп заощаджень?</div>
+                <div className="grid gap-2">
+                  {analysis.whatIf.map((w, i) => {
+                    const diff = baseMonths != null && w.medianMonths != null && i !== 0
+                      ? w.medianMonths - baseMonths
+                      : null;
+                    return (
+                      <div key={i} className={cn(
+                        "border rounded-xl p-3",
+                        i === 0 ? "border-slate-300 bg-slate-50" : "border-slate-200"
+                      )}>
+                        <div className="text-sm font-semibold text-slate-800">{w.label}</div>
+                        <div className="text-sm text-slate-600 mt-0.5">
+                          Внесок: <b>{formatMoney(w.monthlyContribution, currency)} / міс.</b>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {w.medianLabel
+                            ? `Найімовірніше досягнеш за ${w.medianLabel}`
+                            : "За такого темпу ціль недосяжна у прийнятний строк"}
+                          {diff != null && (
+                            <span className={cn("ml-2 font-medium", diff < 0 ? "text-emerald-600" : "text-rose-600")}>
+                              ({diff < 0 ? `на ${Math.abs(diff)} міс. швидше` : `на ${diff} міс. повільніше`})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })() : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -861,15 +1167,32 @@ function PatternsSection({ data, currency }) {
   if (!clusters.length) return <EmptyState text="Патерни витрат ще не сформовано." />;
 
   return (
-    <Card title="Типи поведінки витрат" subtitle="Автоматично виявлені групи витрат за вашою історією">
-      <div className="grid md:grid-cols-2 gap-4">
-        {clusters.map((cluster, index) => (
-          <div key={index} className="border border-slate-200 rounded-xl p-4">
-            <div className="text-base font-semibold">{cluster.label}</div>
-            <div className="text-sm text-slate-600 mt-1">{cluster.description}</div>
-
+    <div className="grid gap-4">
+      <div>
+        <div className="text-lg font-semibold text-slate-900">Типи поведінки витрат</div>
+        <div className="text-sm text-slate-500 mt-0.5">Автоматично виявлені групи витрат за вашою історією</div>
+      </div>
+      {clusters.map((cluster, index) => (
+        <div key={index} className="border border-slate-200 rounded-xl bg-white p-4">
+          <div className="flex items-start gap-6 flex-wrap">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-slate-900">{cluster.label}</div>
+              <div className="text-sm text-slate-600 mt-1">{cluster.description}</div>
+              {cluster.top?.length ? (
+                <div className="mt-3">
+                  <span className="text-xs text-slate-500 mr-2">Топ категорій:</span>
+                  <span className="inline-flex flex-wrap gap-1.5">
+                    {cluster.top.map((cat, i) => (
+                      <span key={i} className="px-2 py-1 text-xs border border-slate-200 rounded-full bg-slate-50 text-slate-700">
+                        {cat}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              ) : null}
+            </div>
             {cluster.stats ? (
-              <div className="grid grid-cols-3 gap-2 mt-4">
+              <div className="flex gap-2 shrink-0">
                 {Object.entries(cluster.stats).map(([key, value]) => (
                   <Metric
                     key={key}
@@ -879,23 +1202,16 @@ function PatternsSection({ data, currency }) {
                 ))}
               </div>
             ) : null}
-
-            {cluster.top?.length ? (
-              <div className="text-sm text-slate-700 mt-4">
-                <b>Топ категорій:</b> {cluster.top.join(", ")}
-              </div>
-            ) : null}
-
-            {cluster.recommendation ? (
-              <div className="mt-3 border-t border-slate-200 pt-3">
-                <div className="text-sm font-semibold">Рекомендація</div>
-                <div className="text-sm text-slate-600 mt-1">{cluster.recommendation}</div>
-              </div>
-            ) : null}
           </div>
-        ))}
-      </div>
-    </Card>
+          {cluster.recommendation ? (
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <div className="text-sm font-semibold">Рекомендація</div>
+              <div className="text-sm text-slate-600 mt-1">{cluster.recommendation}</div>
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }
 
