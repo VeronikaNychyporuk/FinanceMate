@@ -167,6 +167,13 @@ export default function DashboardPage() {
 
   const balance = income - expense;
 
+  const totalBalance = useMemo(() => {
+    const endOfMonth = selectedMonthPeriod.endOf('month');
+    return transactions
+      .filter((t) => dayjs(t.date).isSameOrBefore(endOfMonth))
+      .reduce((sum, t) => sum + (t.type === 'income' ? 1 : -1) * (t.amountInBaseCurrency || 0), 0);
+  }, [transactions, selectedMonthPeriod]);
+
   const categorySummary = useMemo(() => {
     const summary = {};
     txSelectedMonth.forEach((tx) => {
@@ -339,9 +346,15 @@ export default function DashboardPage() {
             <p className="text-lg font-bold text-red-500">−{expense.toFixed(2)} {currency}</p>
           </div>
           <div className={`flex-1 min-w-[140px] rounded-xl px-4 py-3 ${balance >= 0 ? 'bg-blue-50' : 'bg-orange-50'}`}>
-            <p className={`text-xs font-medium mb-1 ${balance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Баланс</p>
+            <p className={`text-xs font-medium mb-1 ${balance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Баланс за місяць</p>
             <p className={`text-lg font-bold ${balance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
               {balance >= 0 ? '+' : '–'}{Math.abs(balance).toFixed(2)} {currency}
+            </p>
+          </div>
+          <div className={`flex-1 min-w-[140px] rounded-xl px-4 py-3 ${totalBalance >= 0 ? 'bg-gray-50' : 'bg-orange-50'}`}>
+            <p className={`text-xs font-medium mb-1 ${totalBalance >= 0 ? 'text-gray-600' : 'text-orange-700'}`}>Загальний баланс</p>
+            <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-gray-800' : 'text-orange-600'}`}>
+              {totalBalance >= 0 ? '+' : '–'}{Math.abs(totalBalance).toFixed(2)} {currency}
             </p>
           </div>
         </div>

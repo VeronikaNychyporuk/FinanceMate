@@ -442,6 +442,14 @@ exports.generateRecommendationsForUser = async (userId) => {
     .populate("categoryId", "name type icon")
     .sort({ date: -1 });
 
+  // Compute actual current balance from ALL transactions, not just the 180-day window.
+  // The 180-day window is used only for the forecasting model itself.
+  const allTransactions = await Transaction.find({ userId }).select("type amountInBaseCurrency");
+  const actualBalance = allTransactions.reduce(
+    (sum, tx) => sum + (tx.type === "income" ? tx.amountInBaseCurrency : -tx.amountInBaseCurrency),
+    0
+  );
+
   const expenseTransactions = transactions.filter((tx) => tx.type === "expense");
 
   const currentMonth = now.getMonth() + 1;
@@ -472,7 +480,7 @@ exports.generateRecommendationsForUser = async (userId) => {
     budget,
     now,
   });
-  const forecast = buildForecast(transactions);
+  const forecast = buildForecast(transactions, 30, actualBalance);
   const goalsAnalysis = buildGoalsAnalysis(goals, goalTransactions);
   const patterns = buildPatterns(expenseTransactions);
 

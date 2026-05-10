@@ -800,80 +800,130 @@ function ForecastSummaryCard({ label, value, valueColor, sub }) {
   );
 }
 
+
 function ForecastInsight({ forecast, currency }) {
   const series = forecast.seriesBalance || [];
-  if (!series.length) return null;
-
-  const startBal = series[0]?.balance ?? 0;
-  const endBal = series[series.length - 1]?.balance ?? 0;
-  const avgDaily = forecast.averageDailyNet ?? 0;
-  const minBal = Math.min(...series.map((p) => p.balance));
+  const scenarios = forecast.scenarios || null;
+  const monthlyBlocks = forecast.monthlyForecastBlocks || [];
   const crossing = findZeroCrossing(series);
 
-  const isNegativeTrend = avgDaily < 0;
+  const startBal = series[0]?.balance ?? 0;
+  const rawMonthly = forecast.averageMonthlyNet ?? 0;
+  const avgMonthly = Math.round(rawMonthly) === 0 ? 0 : rawMonthly;
+
+  const isNegativeTrend = avgMonthly < 0;
+  const isNeutralTrend = avgMonthly === 0;
+
+  const statusColor = isNegativeTrend
+
+    ? "border-rose-200 bg-rose-50"
+    : isNeutralTrend
+    ? "border-slate-200 bg-slate-50"
+    : "border-emerald-200 bg-emerald-50";
+
+  const statusDot = isNegativeTrend ? "bg-rose-500" : isNeutralTrend ? "bg-amber-400" : "bg-emerald-500";
+
+  const statusText = isNegativeTrend
+    ? crossing
+      ? "Баланс може стати від'ємним"
+      : "Баланс поступово знижується"
+    : isNeutralTrend
+    ? "Баланс майже не змінюється"
+    : "Баланс зростає";
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <ForecastSummaryCard
-          label="Поточний баланс"
-          value={formatMoney(startBal, currency)}
-          valueColor={startBal >= 0 ? "text-emerald-700" : "text-red-600"}
-        />
-        <ForecastSummaryCard
-          label={`Через ${forecast.horizonDays || 30} днів`}
-          value={formatMoney(endBal, currency)}
-          valueColor={endBal >= 0 ? "text-emerald-700" : "text-red-600"}
-          sub="прогнозований баланс"
-        />
-        <ForecastSummaryCard
-          label="Щоденна зміна"
-          value={`${avgDaily >= 0 ? "+" : ""}${formatMoney(avgDaily, currency)}`}
-          valueColor={avgDaily >= 0 ? "text-emerald-700" : "text-red-600"}
-          sub="середній приріст / спад"
-        />
-        {crossing ? (
-          <ForecastSummaryCard
-            label="Баланс стане від'ємним"
-            value={crossing.date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric" })}
-            valueColor="text-red-600"
-            sub="за поточних витрат"
-          />
-        ) : (
-          <ForecastSummaryCard
-            label="Мінімальний баланс"
-            value={formatMoney(minBal, currency)}
-            valueColor={minBal < 0 ? "text-red-600" : "text-slate-900"}
-            sub="протягом прогнозу"
-          />
-        )}
+      {/* ── Головний блок: статус + дві цифри ── */}
+      <div className={cn("rounded-xl border p-5", statusColor)}>
+        <div className="flex items-center gap-2 mb-4">
+          <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", statusDot)} />
+          <span className="text-sm font-semibold text-slate-800">{statusText}</span>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div>
+            <div className="text-xs text-slate-500 mb-0.5">Зараз</div>
+            <div className="text-2xl font-bold text-slate-900">{formatMoney(startBal, currency)}</div>
+          </div>
+
+          <div className="text-slate-300 text-2xl font-light select-none">→</div>
+
+          <div>
+            <div className="text-xs text-slate-500 mb-0.5">Через {forecast.horizonDays || 30} днів</div>
+            {scenarios ? (
+              <div className="text-2xl font-bold text-slate-900">
+                ~{formatMoney(scenarios.likely, currency)}
+              </div>
+            ) : (
+              <div className="text-2xl font-bold text-slate-400">—</div>
+            )}
+          </div>
+        </div>
+
+        {/* Пояснення ситуації */}
+        <div className="mt-4 text-sm text-slate-700 leading-relaxed">
+          {isNegativeTrend ? (
+            crossing ? (
+              <>За поточними витратами баланс може стати від'ємним{" "}
+                <b>{crossing.date.toLocaleDateString("uk-UA", { day: "2-digit", month: "long" })}</b>.{" "}
+                Варто переглянути регулярні витрати або збільшити надходження.</>
+            ) : (
+              <>Щомісяця витрати трохи перевищують доходи. Баланс поки позитивний,
+                але продовжує знижуватись — варто переглянути регулярні витрати.</>
+            )
+          ) : isNeutralTrend ? (
+            <>Доходи й витрати майже рівні — баланс стоїть на місці.
+              Щоб відкладати на майбутнє, достатньо трохи скоротити витрати або збільшити дохід.</>
+          ) : (
+            <>Доходи перевищують витрати — баланс поступово зростає. Так тримати.</>
+          )}
+        </div>
       </div>
 
-      <div className={cn(
-        "rounded-xl border px-4 py-3 text-sm",
-        isNegativeTrend ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"
-      )}>
-        {isNegativeTrend ? (
-          crossing ? (
-            <>
-              <b>Увага:</b> за поточними темпами баланс стане від'ємним{" "}
-              <b>{crossing.date.toLocaleDateString("uk-UA", { day: "2-digit", month: "long" })}</b>.
-              {" "}Щоденний відтік: <b>{formatMoney(Math.abs(avgDaily), currency)}</b>.
-              {" "}Рекомендуємо скоротити витрати або збільшити надходження.
-            </>
-          ) : (
-            <>
-              Баланс поступово знижується. Щоденна зміна:{" "}
-              <b>{formatMoney(avgDaily, currency)}</b>. Варто переглянути витрати.
-            </>
-          )
-        ) : (
-          <>
-            Фінансова ситуація стабільна. Щоденний приріст:{" "}
-            <b>{formatMoney(avgDaily, currency)}</b>. Продовжуйте в тому ж темпі.
-          </>
-        )}
-      </div>
+      {/* ── Що очікується по місяцях ── */}
+      {monthlyBlocks.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold text-slate-800 mb-3">Що очікується найближчими місяцями</div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {monthlyBlocks.reduce((acc, block, i) => {
+              const prevBal = i === 0 ? startBal : acc[i - 1].projectedBal;
+              const projectedBal = prevBal + block.flow;
+              acc.push({ ...block, projectedBal });
+              return acc;
+            }, []).map((block, i) => {
+              const isPositive = block.flow > 0;
+              const isNeutral = block.flow === 0;
+              const borderColor = isNeutral ? "border-slate-200" : isPositive ? "border-emerald-200" : "border-rose-200";
+              const bgColor = isNeutral ? "bg-white" : isPositive ? "bg-emerald-50" : "bg-rose-50";
+              const changeColor = isNeutral ? "text-slate-400" : isPositive ? "text-emerald-600" : "text-rose-500";
+              const changeText = isNeutral
+                ? "без змін"
+                : isPositive
+                ? `+${formatMoney(block.flow, currency)} за місяць`
+                : `${formatMoney(block.flow, currency)} за місяць`;
+
+              return (
+                <div key={i} className={cn("rounded-xl border p-4 flex flex-col gap-1", borderColor, bgColor)}>
+                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    {block.label.replace(/\s*р\./i, "").trim()}
+                    {block.isPartial && (
+                      <span className="ml-1 normal-case font-normal">· залишок {block.remainingDays} дн.</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">Очікуваний баланс на кінець місяця</div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    ~{formatMoney(block.projectedBal, currency)}
+                  </div>
+                  <div className={cn("text-xs mt-0.5", changeColor)}>{changeText}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 text-xs text-slate-400">
+            Прогноз базується на вашій фінансовій історії та може не враховувати непередбачені витрати.
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -896,15 +946,10 @@ function ForecastSection({ forecast, currency }) {
     <div className="grid gap-4">
       <ForecastInsight forecast={forecast} currency={currency} />
 
-      <Card
-        title="Прогноз балансу"
-        subtitle={`Очікувана динаміка на ${forecast.horizonDays || 0} днів вперед`}
-      >
-        <ForecastChart points={forecast.seriesBalance || []} currency={currency} width={580} height={240} />
-      </Card>
-
       {(forecast.risks || []).length ? (
-        <Card title="Ризики та підказки" subtitle="Сформовано на основі прогнозу">
+        <div>
+          <div className="text-sm font-semibold text-slate-800 mb-1">Ризики та підказки</div>
+          <div className="text-xs text-slate-400 mb-3">Сформовано на основі прогнозу</div>
           <div className="grid gap-2">
             {forecast.risks.map((r, i) => (
               <div key={i} className="border border-slate-200 rounded-xl p-3">
@@ -913,7 +958,7 @@ function ForecastSection({ forecast, currency }) {
               </div>
             ))}
           </div>
-        </Card>
+        </div>
       ) : null}
     </div>
   );

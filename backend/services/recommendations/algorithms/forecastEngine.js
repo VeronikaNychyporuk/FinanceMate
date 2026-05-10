@@ -185,16 +185,21 @@ const buildBalanceSeries = (baseBalance, forecastValues, today, sigma) => {
   const Z95 = 1.96;
   let running = baseBalance;
 
-  return forecastValues.map((f, i) => {
+  // Include today as the starting anchor point so the chart starts from the real balance
+  const points = [{ date: today.toISOString(), balance: round(baseBalance) }];
+
+  forecastValues.forEach((f, i) => {
     running += f;
     const h = i + 1;
     const margin = sigma > 0 ? round(Z95 * sigma * Math.sqrt(h)) : null;
-    return {
+    points.push({
       date: new Date(today.getTime() + h * DAY_MS).toISOString(),
       balance: round(running),
       ...(margin != null && { lower: round(running - margin), upper: round(running + margin) }),
-    };
+    });
   });
+
+  return points;
 };
 
 const buildRisks = (seriesBalance, avgForecast) => {
@@ -223,102 +228,175 @@ const buildRisks = (seriesBalance, avgForecast) => {
   }];
 };
 
+// ─── Monthly series builders ──────────────────────────────────────────────────
+
+const buildMonthlySeries = (transactions) => {
+  const monthMap = new Map();
+  transactions.forEach((tx) => {
+    const d = new Date(tx.date);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!monthMap.has(key)) {
+      monthMap.set(key, { key, year: d.getFullYear(), month: d.getMonth(), value: 0 });
+    }
+    monthMap.get(key).value +=
+      (tx.type === "income" ? 1 : -1) * (tx.amountInBaseCurrency || 0);
+  });
+  return [...monthMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => v);
+};
+
+// Distribute monthly forecast values evenly across calendar days
+const buildDailyFromMonthly = (monthlyForecasts, today, horizonDays) =>
+  Array.from({ length: horizonDays }, (_, h) => {
+    const date = new Date(today.getTime() + (h + 1) * DAY_MS);
+    const monthsAhead =
+      (date.getFullYear() - today.getFullYear()) * 12 +
+      (date.getMonth() - today.getMonth());
+    const mIdx = Math.min(Math.max(monthsAhead, 0), monthlyForecasts.length - 1);
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    return monthlyForecasts[mIdx] / daysInMonth;
+  });
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Tiered forecasting:
- *   Tier 0 — < 30 days or < 20 transactions : "insufficient" (no forecast)
- *   Tier 1 — 30–89 days                     : Double Exponential Smoothing (Holt)
- *   Tier 2 — ≥ 90 days and ≥ 60 transactions: Holt-Winters Triple ES (weekly seasonality)
+ * Monthly-aggregated tiered forecasting (current month excluded if incomplete):
+ *   Tier 0 — < 3 complete months or < 10 transactions : "insufficient"
+ *   Tier 1 — 3–23 complete months                     : Double Exponential Smoothing on monthly data
+ *   Tier 2 — ≥ 24 complete months                     : Holt-Winters with annual seasonality (m=12)
+ *
+ * Working on monthly aggregates avoids the daily-noise problem where a single
+ * salary payment creates a spike that the daily ES interprets as a huge trend.
+ * The current partial month is excluded so mid-month bias does not distort trend detection.
  */
-const buildForecast = (transactions, horizonDays = 30) => {
+const buildForecast = (transactions, horizonDays = 30, startingBalance = null) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const dataSpanDays = getDataSpanDays(transactions);
   const txCount = transactions.length;
+  const monthlySeries = buildMonthlySeries(transactions);
 
-  // Tier 0: not enough data for any meaningful model
-  if (dataSpanDays < 30 || txCount < 20) {
+  // Exclude the current calendar month from training unless today is the last day,
+  // because partial-month data biases trend detection (e.g. salary arriving late in the month
+  // makes the current month look like a loss even when the full month will be positive).
+  const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const daysInCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const isLastDayOfMonth = today.getDate() === daysInCurrentMonth;
+  const trainingMonths = isLastDayOfMonth
+    ? monthlySeries
+    : monthlySeries.filter((m) => m.key !== currentMonthKey);
+
+  const monthCount = trainingMonths.length;
+
+  // Tier 0: not enough data
+  if (monthCount < 3 || txCount < 10) {
     return {
       method: "insufficient",
       methodLabel: "Недостатньо даних",
       insufficientReason:
-        `Для прогнозування потрібно мінімум 30 днів даних і 20 транзакцій. ` +
-        `Наразі: ${dataSpanDays} дн., ${txCount} транз. ` +
+        `Для прогнозування потрібно мінімум 3 місяці даних і 10 транзакцій. ` +
+        `Наразі: ${monthCount} міс., ${txCount} транз. ` +
         `Продовжуйте вести облік — прогноз з'явиться автоматично.`,
       horizonDays,
       seriesBalance: null,
       averageDailyNet: null,
       risks: [],
-      model: { dataSpanDays, dataPoints: txCount, dataConfidence: "none" },
+      model: { dataSpanDays: monthCount * 30, dataPoints: txCount, dataConfidence: "none" },
     };
   }
 
-  // Net cumulative balance of the full available window as a starting point
-  const baseBalance = round(
-    transactions.reduce(
-      (sum, tx) =>
-        sum + (tx.type === "income" ? tx.amountInBaseCurrency : -tx.amountInBaseCurrency),
-      0
-    )
-  );
+  const baseBalance = startingBalance !== null
+    ? round(startingBalance)
+    : round(
+        transactions.reduce(
+          (sum, tx) =>
+            sum + (tx.type === "income" ? tx.amountInBaseCurrency : -tx.amountInBaseCurrency),
+          0
+        )
+      );
 
-  let method, methodLabel, forecastValues, fittedPairs, params;
+  const y = trainingMonths.map((m) => m.value);
+  // Forecast enough months to cover the full horizon (+1 for safety)
+  const forecastMonths = Math.ceil(horizonDays / 28) + 1;
 
-  if (dataSpanDays >= 90 && txCount >= 60) {
-    // Tier 2: Holt-Winters with weekly seasonality
-    const m = 7;
-    const series = buildDailySeries(transactions, dataSpanDays);
-    const y = series.map((p) => p.value);
+  let method, methodLabel, monthlyForecastValues, fittedPairs, params;
+
+  if (monthCount >= 12) {
+    // Tier 2: Holt-Winters with annual seasonality
+    const m = 12;
     const hwParams = optimizeHoltWinters(y, m);
     const hwModel = holtWinters(y, hwParams.alpha, hwParams.beta, hwParams.gamma, m);
-
     if (hwModel) {
       method = "holt_winters";
-      methodLabel = "Holt-Winters (Triple ES)";
+      methodLabel = "Holt-Winters (річна сезонність)";
       params = { ...hwParams, seasonPeriod: m };
       fittedPairs = hwModel.fitted;
-      forecastValues = forecastHW(hwModel, horizonDays);
-    } else {
-      // Fallback — shouldn't happen given tier thresholds, but be safe
-      method = "double_es";
-      methodLabel = "Подвійне згладжування (Holt)";
-      params = optimizeDoubleES(y);
-      const desModel = doubleES(y, params.alpha, params.beta);
-      fittedPairs = desModel.fitted;
-      forecastValues = forecastDoubleES(desModel, horizonDays);
+      monthlyForecastValues = forecastHW(hwModel, forecastMonths);
     }
-  } else {
-    // Tier 1: Double ES — estimate level and trend, skip seasonality
-    const windowDays = Math.min(dataSpanDays, 90);
-    const series = buildDailySeries(transactions, windowDays);
-    const y = series.map((p) => p.value);
+  }
+
+  if (!monthlyForecastValues) {
+    // Tier 1: Double ES on monthly data
     params = optimizeDoubleES(y);
     method = "double_es";
     methodLabel = "Подвійне згладжування (Holt)";
     const desModel = doubleES(y, params.alpha, params.beta);
     fittedPairs = desModel.fitted;
-    forecastValues = forecastDoubleES(desModel, horizonDays);
+    monthlyForecastValues = forecastDoubleES(desModel, forecastMonths);
   }
 
   const { mae, mape, residuals } = computeMetrics(fittedPairs);
-  const sigma = stddev(residuals);
-  const seriesBalance = buildBalanceSeries(baseBalance, forecastValues, today, sigma);
+  const monthlySigma = stddev(residuals);
+
+  // ─── Monthly forecast blocks (current month remaining + next 2 full months) ─
+  const remainingDaysInCurrentMonth = daysInCurrentMonth - today.getDate();
+  const monthlyForecastBlocks = [];
+
+  if (remainingDaysInCurrentMonth > 0 && monthlyForecastValues[0] != null) {
+    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthlyForecastBlocks.push({
+      label: d.toLocaleDateString("uk-UA", { month: "long", year: "numeric" }),
+      flow: round(monthlyForecastValues[0] * remainingDaysInCurrentMonth / daysInCurrentMonth),
+      isPartial: true,
+      remainingDays: remainingDaysInCurrentMonth,
+    });
+  }
+  for (let i = 1; i <= 2; i++) {
+    if (monthlyForecastValues[i] == null) break;
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    monthlyForecastBlocks.push({
+      label: d.toLocaleDateString("uk-UA", { month: "long", year: "numeric" }),
+      flow: round(monthlyForecastValues[i]),
+      isPartial: false,
+    });
+  }
 
   const dataConfidence =
-    txCount >= 120 && dataSpanDays >= 180
-      ? "high"
-      : txCount >= 60 && dataSpanDays >= 90
-      ? "medium"
-      : "low";
+    monthCount >= 24 ? "high" : monthCount >= 12 ? "medium" : "low";
+
+  // ─── Daily series for the exact horizon window (used for scenarios + risks) ───
+  const forecastValues = buildDailyFromMonthly(monthlyForecastValues, today, horizonDays);
+  const dailySigma = monthlySigma > 0 ? monthlySigma / Math.sqrt(30) : 0;
+  const seriesBalance = buildBalanceSeries(baseBalance, forecastValues, today, dailySigma);
+
+  // ─── Scenarios: use the last point of the daily series for the exact 30-day balance ─
+  const likelyBalance = seriesBalance[seriesBalance.length - 1]?.balance ?? baseBalance;
+  const scenarios = {
+    pessimistic: round(likelyBalance - (monthlySigma || 0)),
+    likely: round(likelyBalance),
+    optimistic: round(likelyBalance + (monthlySigma || 0)),
+    hasRange: monthlySigma > 0,
+  };
 
   return {
     method,
     methodLabel,
     horizonDays,
     seriesBalance,
-    averageDailyNet: round(mean(forecastValues)),
+    scenarios,
+    monthlyForecastBlocks,
+    averageMonthlyNet: round(mean(monthlyForecastValues.slice(0, forecastMonths))),
     risks: buildRisks(seriesBalance, mean(forecastValues)),
     model: {
       ...params,
@@ -326,7 +404,7 @@ const buildForecast = (transactions, horizonDays = 30) => {
       mape,
       dataConfidence,
       dataPoints: txCount,
-      dataSpanDays,
+      dataSpanDays: monthlySeries.length * 30,
     },
   };
 };
