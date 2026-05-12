@@ -1,3 +1,4 @@
+const eventBus = require("../utils/eventBus");
 const Transaction = require("../models/Transaction");
 const Budget = require("../models/Budget");
 const Goal = require("../models/Goal");
@@ -554,6 +555,8 @@ exports.generateRecommendationsForUser = async (userId) => {
       setDefaultsOnInsert: true,
     }
   );
+
+  eventBus.emit("recommendation:updated", { userId });
 
   return {
     recommendationsCreated: createdRecommendations.length,

@@ -11,6 +11,7 @@ const {
   getRecommendationSnapshot,
   patchRecommendationStatus,
   generateRecommendations,
+  streamRecommendations,
 } = require("../controllers/recommendation.controller");
 
 const {
@@ -29,6 +30,11 @@ router.post(
   "/generate",
   authMiddleware,
   generateRecommendations
+);
+
+router.get(
+  "/stream",
+  streamRecommendations
 );
 
 router.get(

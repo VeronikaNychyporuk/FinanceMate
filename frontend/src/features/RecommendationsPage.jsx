@@ -1339,6 +1339,27 @@ export default function RecommendationsPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+
+    const source = new EventSource(
+      `http://localhost:5000/api/recommendations/stream?token=${token}`
+    );
+
+    source.addEventListener("recommendation:updated", () => {
+      loadData();
+    });
+
+    source.onerror = () => {
+      source.close();
+    };
+
+    return () => {
+      source.close();
+    };
+  }, []);
+
   const updateRecommendationStatus = async (id, status) => {
     try {
       setActionLoadingId(id);

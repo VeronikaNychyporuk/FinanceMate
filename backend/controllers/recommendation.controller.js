@@ -1,3 +1,6 @@
+const jwt = require("jsonwebtoken");
+const eventBus = require("../utils/eventBus");
+
 const {
   fetchRecommendations,
   fetchRecommendationById,
@@ -8,6 +11,37 @@ const {
 const {
   generateRecommendationsForUser,
 } = require("../services/recommendationGeneration.service");
+
+// Map<userId, Set<res>> — активні SSE-з'єднання
+const activeConnections = new Map();
+
+const addConnection = (userId, res) => {
+  if (!activeConnections.has(userId)) {
+    activeConnections.set(userId, new Set());
+  }
+  activeConnections.get(userId).add(res);
+};
+
+const removeConnection = (userId, res) => {
+  const connections = activeConnections.get(userId);
+  if (!connections) return;
+  connections.delete(res);
+  if (connections.size === 0) activeConnections.delete(userId);
+};
+
+const sendEvent = (res, event, data) => {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+exports.closeAllConnections = () => {
+  for (const connections of activeConnections.values()) {
+    for (const res of connections) {
+      res.end();
+    }
+  }
+  activeConnections.clear();
+};
 
 exports.getRecommendations = async (req, res) => {
   try {
@@ -77,4 +111,47 @@ exports.generateRecommendations = async (req, res) => {
       error: err.message,
     });
   }
+};
+
+exports.streamRecommendations = (req, res) => {
+  const token = req.query.token;
+
+  if (!token) {
+    return res.status(401).json({ message: "Токен відсутній." });
+  }
+
+  let userId;
+  try {
+    const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+    userId = decoded.userId;
+  } catch {
+    return res.status(401).json({ message: "Недійсний або протермінований токен." });
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  addConnection(userId, res);
+
+  sendEvent(res, "connected", { message: "SSE з'єднання встановлено." });
+
+  const heartbeat = setInterval(() => {
+    res.write(": ping\n\n");
+  }, 30000);
+
+  const onUpdate = ({ userId: updatedUserId }) => {
+    if (String(updatedUserId) === String(userId)) {
+      sendEvent(res, "recommendation:updated", { timestamp: new Date().toISOString() });
+    }
+  };
+
+  eventBus.on("recommendation:updated", onUpdate);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    eventBus.removeListener("recommendation:updated", onUpdate);
+    removeConnection(userId, res);
+  });
 };
