@@ -322,7 +322,7 @@ const buildForecast = (transactions, horizonDays = 30, startingBalance = null) =
 
   let method, methodLabel, monthlyForecastValues, fittedPairs, params;
 
-  if (monthCount >= 12) {
+  if (monthCount >= 24) {
     // Tier 2: Holt-Winters with annual seasonality
     const m = 12;
     const hwParams = optimizeHoltWinters(y, m);
