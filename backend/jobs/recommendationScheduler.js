@@ -52,6 +52,7 @@ let task = null;
 exports.startRecommendationScheduler = () => {
   task = cron.schedule(SCHEDULE, regenerateStaleSnapshots, { scheduled: true });
   console.log("[scheduler] Планувальник рекомендацій запущено (кожні 6 годин).");
+  regenerateStaleSnapshots();
 };
 
 exports.stopRecommendationScheduler = () => {

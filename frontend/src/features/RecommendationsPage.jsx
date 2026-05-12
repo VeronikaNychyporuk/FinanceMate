@@ -1298,9 +1298,9 @@ export default function RecommendationsPage() {
       };
 
       const [recommendationsResponse, snapshotResponse, profileResponse] = await Promise.all([
-        fetch(API_BASE_URL, { headers }),
-        fetch(`${API_BASE_URL}/snapshot`, { headers }),
-        fetch(USER_API_URL, { headers }),
+        fetch(API_BASE_URL, { headers, cache: "no-store" }),
+        fetch(`${API_BASE_URL}/snapshot`, { headers, cache: "no-store" }),
+        fetch(USER_API_URL, { headers, cache: "no-store" }),
       ]);
 
       const recommendationsJson = await recommendationsResponse.json();
@@ -1352,7 +1352,9 @@ export default function RecommendationsPage() {
     });
 
     source.onerror = () => {
-      source.close();
+      if (source.readyState === EventSource.CLOSED) {
+        source.close();
+      }
     };
 
     return () => {

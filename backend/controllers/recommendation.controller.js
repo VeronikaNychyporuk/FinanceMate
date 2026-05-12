@@ -128,7 +128,7 @@ exports.streamRecommendations = (req, res) => {
     return res.status(401).json({ message: "Недійсний або протермінований токен." });
   }
 
-  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
