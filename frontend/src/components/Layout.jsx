@@ -23,12 +23,16 @@ import logo from '../assets/logo.png';
 const DRAWER_WIDTH = 248;
 
 const NAV_ITEMS = [
-  { label: 'Аналітика',           path: '/dashboard',               Icon: LayoutDashboard },
-  { label: 'Транзакції',          path: '/transactions',             Icon: ArrowLeftRight },
-  { label: 'Регулярні транзакції',path: '/recurring-transactions',   Icon: RefreshCw },
-  { label: 'Бюджет',              path: '/budgets',                  Icon: Wallet },
-  { label: 'Цілі',                path: '/goals',                    Icon: Target },
-  { label: 'Рекомендації',        path: '/recommendations',          Icon: Lightbulb },
+  { label: 'Аналітика',    path: '/dashboard',       Icon: LayoutDashboard },
+  {
+    label: 'Транзакції',   path: '/transactions',     Icon: ArrowLeftRight,
+    children: [
+      { label: 'Регулярні транзакції', path: '/recurring-transactions', Icon: RefreshCw },
+    ],
+  },
+  { label: 'Бюджет',       path: '/budgets',          Icon: Wallet },
+  { label: 'Цілі',         path: '/goals',            Icon: Target },
+  { label: 'Рекомендації', path: '/recommendations',  Icon: Lightbulb },
 ];
 
 export default function Layout({ children }) {
@@ -141,26 +145,64 @@ export default function Layout({ children }) {
 
           {/* Nav items */}
           <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-            {NAV_ITEMS.map(({ label, path, Icon }) => {
+            {NAV_ITEMS.map(({ label, path, Icon, children }) => {
               const isActive =
                 location.pathname === path ||
                 (path !== '/dashboard' && location.pathname.startsWith(path));
 
+              const isExpanded =
+                children &&
+                (location.pathname.startsWith(path) ||
+                  children.some((c) => location.pathname.startsWith(c.path)));
+
               return (
-                <button
-                  key={path}
-                  type="button"
-                  onClick={() => navigate(path)}
-                  className={[
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-all duration-150 whitespace-nowrap',
-                    isActive
-                      ? 'bg-white/10 text-white'
-                      : 'text-white/50 hover:bg-white/5 hover:text-white/80',
-                  ].join(' ')}
-                >
-                  <Icon size={17} strokeWidth={isActive ? 2.2 : 1.7} className="shrink-0" />
-                  <span className="truncate">{label}</span>
-                </button>
+                <div key={path}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(path)}
+                    className={[
+                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                      isActive
+                        ? 'bg-white/10 text-white'
+                        : 'text-white/50 hover:bg-white/5 hover:text-white/80',
+                    ].join(' ')}
+                  >
+                    <Icon size={17} strokeWidth={isActive ? 2.2 : 1.7} className="shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </button>
+
+                  {children && (
+                    <div
+                      style={{
+                        maxHeight: isExpanded ? children.length * 52 : 0,
+                        overflow: 'hidden',
+                        transition: 'max-height 0.2s ease',
+                      }}
+                    >
+                      {children.map(({ label: cLabel, path: cPath, Icon: CIcon }) => {
+                        const cActive =
+                          location.pathname === cPath ||
+                          location.pathname.startsWith(cPath);
+                        return (
+                          <button
+                            key={cPath}
+                            type="button"
+                            onClick={() => navigate(cPath)}
+                            className={[
+                              'w-full flex items-center gap-3 pl-9 pr-3 py-2 rounded-lg text-left text-sm font-medium transition-all duration-150 whitespace-nowrap',
+                              cActive
+                                ? 'bg-white/10 text-white'
+                                : 'text-white/40 hover:bg-white/5 hover:text-white/70',
+                            ].join(' ')}
+                          >
+                            <CIcon size={15} strokeWidth={cActive ? 2.2 : 1.7} className="shrink-0" />
+                            <span className="truncate">{cLabel}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
