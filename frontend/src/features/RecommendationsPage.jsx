@@ -94,12 +94,12 @@ function Card({ title, subtitle, right, children }) {
   );
 }
 
-function PrimaryButton({ children, onClick, disabled }) {
+function PrimaryButton({ children, onClick, disabled, className }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 active:bg-slate-950 disabled:opacity-60"
+      className={cn("px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 active:bg-slate-950 disabled:opacity-60", className)}
       type="button"
     >
       {children}
@@ -107,12 +107,12 @@ function PrimaryButton({ children, onClick, disabled }) {
   );
 }
 
-function GhostButton({ children, onClick, disabled }) {
+function GhostButton({ children, onClick, disabled, className }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="px-3 py-2 rounded-lg border border-slate-200 text-slate-900 text-sm hover:bg-slate-50 active:bg-slate-100 disabled:opacity-60"
+      className={cn("px-3 py-2 rounded-lg border border-slate-200 text-slate-900 text-sm hover:bg-slate-50 active:bg-slate-100 disabled:opacity-60", className)}
       type="button"
     >
       {children}
@@ -256,7 +256,7 @@ function Metric({ label, value }) {
 
 /* ============ Recommendation Components ============ */
 
-function RecommendationCard({ recommendation, onDismiss, onDone, onAction, actionLoading }) {
+function RecommendationCard({ recommendation, onDismiss, onAction, actionLoading }) {
   const { primaryAction, secondaryAction } = recommendation;
   const handleAction = (action) => onAction(action, recommendation);
   return (
@@ -285,35 +285,27 @@ function RecommendationCard({ recommendation, onDismiss, onDone, onAction, actio
           ) : null}
         </div>
 
-        {(primaryAction || secondaryAction) && (
-          <div className="flex flex-col gap-2 shrink-0">
-            {primaryAction && (
-              <PrimaryButton onClick={() => handleAction(primaryAction)}>
-                {primaryAction.label}
-              </PrimaryButton>
-            )}
-            {secondaryAction && (
-              <GhostButton onClick={() => handleAction(secondaryAction)}>
-                {secondaryAction.label}
-              </GhostButton>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <GhostButton onClick={() => onDismiss(recommendation._id)} disabled={actionLoading}>
-          Відхилити
-        </GhostButton>
-        <GhostButton onClick={() => onDone(recommendation._id)} disabled={actionLoading}>
-          Виконано
-        </GhostButton>
+        <div className="flex flex-col gap-2 shrink-0">
+          {primaryAction && (
+            <PrimaryButton className="w-full" onClick={() => handleAction(primaryAction)}>
+              {primaryAction.label}
+            </PrimaryButton>
+          )}
+          {secondaryAction && (
+            <GhostButton className="w-full" onClick={() => handleAction(secondaryAction)}>
+              {secondaryAction.label}
+            </GhostButton>
+          )}
+          <GhostButton className="w-full" onClick={() => onDismiss(recommendation._id)} disabled={actionLoading}>
+            Відхилити рекомендацію
+          </GhostButton>
+        </div>
       </div>
     </div>
   );
 }
 
-function RecommendationGroup({ title, items, onDismiss, onDone, onAction, actionLoadingId }) {
+function RecommendationGroup({ title, items, onDismiss, onAction, actionLoadingId }) {
   return (
     <div>
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">{title}</div>
@@ -323,7 +315,6 @@ function RecommendationGroup({ title, items, onDismiss, onDone, onAction, action
             key={item._id}
             recommendation={item}
             onDismiss={onDismiss}
-            onDone={onDone}
             onAction={onAction}
             actionLoading={actionLoadingId === item._id}
           />
@@ -335,7 +326,7 @@ function RecommendationGroup({ title, items, onDismiss, onDone, onAction, action
 
 /* ============ Tab Sections ============ */
 
-function RecommendationsSection({ groupList, onDismiss, onDone, onAction, actionLoadingId }) {
+function RecommendationsSection({ groupList, onDismiss, onAction, actionLoadingId }) {
   if (!groupList.length) {
     return <EmptyState text="Активні рекомендації відсутні." />;
   }
@@ -347,7 +338,6 @@ function RecommendationsSection({ groupList, onDismiss, onDone, onAction, action
           title={group.title}
           items={group.items}
           onDismiss={onDismiss}
-          onDone={onDone}
           onAction={onAction}
           actionLoadingId={actionLoadingId}
         />
@@ -425,7 +415,7 @@ function OverviewSection({ data, period, onPeriodChange, currency }) {
   );
 }
 
-function AnomalyCard({ anomaly, currency, recId, actionLoading, onOpenTransaction, onDismiss, onDone }) {
+function AnomalyCard({ anomaly, currency, recId, actionLoading, onOpenTransaction, onDismiss }) {
   return (
     <div className="border border-slate-200 rounded-xl p-4 bg-white">
       <div className="flex items-start justify-between gap-3">
@@ -445,28 +435,23 @@ function AnomalyCard({ anomaly, currency, recId, actionLoading, onOpenTransactio
             </div>
           )}
         </div>
-        <div className="shrink-0 text-right">
+        <div className="flex flex-col gap-2 shrink-0 items-end">
           <div className="text-base font-bold text-slate-900">{formatMoney(anomaly.amount, currency)}</div>
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {anomaly.transactionId && (
-          <GhostButton onClick={() => onOpenTransaction(anomaly.transactionId)}>
-            Переглянути транзакцію
+          {anomaly.transactionId && (
+            <GhostButton className="w-full" onClick={() => onOpenTransaction(anomaly.transactionId)}>
+              Переглянути транзакцію
+            </GhostButton>
+          )}
+          <GhostButton className="w-full" onClick={() => onDismiss(recId, anomaly.transactionId?.toString())} disabled={actionLoading}>
+            Відхилити аномалію
           </GhostButton>
-        )}
-        <GhostButton onClick={() => onDismiss(recId, anomaly.transactionId?.toString())} disabled={actionLoading}>
-          Відхилити
-        </GhostButton>
-        <GhostButton onClick={() => onDone(recId, anomaly.transactionId?.toString())} disabled={actionLoading}>
-          Виконано
-        </GhostButton>
+        </div>
       </div>
     </div>
   );
 }
 
-function AnomaliesSection({ anomalies, currency, recommendations, onOpenTransaction, onDismiss, onDone, actionLoadingId }) {
+function AnomaliesSection({ anomalies, currency, recommendations, onOpenTransaction, onDismiss, actionLoadingId }) {
   if (!anomalies.length) return <EmptyState text="Аномалій не виявлено." />;
 
   return (
@@ -489,7 +474,6 @@ function AnomaliesSection({ anomalies, currency, recommendations, onOpenTransact
               actionLoading={actionLoadingId === rec?._id}
               onOpenTransaction={onOpenTransaction}
               onDismiss={onDismiss}
-              onDone={onDone}
             />
           );
         })}
@@ -1587,13 +1571,6 @@ export default function RecommendationsPage() {
                   }
                   updateRecommendationStatus(id, "dismissed");
                 }}
-                onDone={(id) => {
-                  const rec = recommendations.find((r) => r._id === id);
-                  if (rec?.module === "anomalies" && rec?.relatedEntity?.entityId) {
-                    setDismissedAnomalyTxIds((prev) => new Set([...prev, rec.relatedEntity.entityId.toString()]));
-                  }
-                  updateRecommendationStatus(id, "done");
-                }}
                 onAction={handleRecommendationAction}
                 actionLoadingId={actionLoadingId}
               />
@@ -1615,10 +1592,6 @@ export default function RecommendationsPage() {
                 onDismiss={(id, txId) => {
                   if (txId) setDismissedAnomalyTxIds((prev) => new Set([...prev, txId]));
                   if (id) updateRecommendationStatus(id, "dismissed");
-                }}
-                onDone={(id, txId) => {
-                  if (txId) setDismissedAnomalyTxIds((prev) => new Set([...prev, txId]));
-                  if (id) updateRecommendationStatus(id, "done");
                 }}
                 actionLoadingId={actionLoadingId}
               />
