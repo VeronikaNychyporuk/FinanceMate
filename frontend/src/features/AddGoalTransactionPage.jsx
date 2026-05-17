@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import {
   TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -77,6 +78,7 @@ export default function AddGoalTransactionPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate(`/goals/${goalId}`);
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити транзакцію';

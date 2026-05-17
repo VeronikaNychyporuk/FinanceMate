@@ -16,6 +16,11 @@ import {
   Wallet,
   Target,
   Lightbulb,
+  Eye,
+  TrendingUp,
+  PieChart,
+  Activity,
+  AlertTriangle,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/logo.png';
@@ -23,7 +28,6 @@ import logo from '../assets/logo.png';
 const DRAWER_WIDTH = 248;
 
 const NAV_ITEMS = [
-  { label: 'Аналітика',    path: '/dashboard',       Icon: LayoutDashboard },
   {
     label: 'Транзакції',   path: '/transactions',     Icon: ArrowLeftRight,
     children: [
@@ -32,6 +36,16 @@ const NAV_ITEMS = [
   },
   { label: 'Бюджет',       path: '/budgets',          Icon: Wallet },
   { label: 'Цілі',         path: '/goals',            Icon: Target },
+  {
+    label: 'Аналітика',    path: '/dashboard',       Icon: LayoutDashboard,
+    children: [
+      { label: 'Фінансовий звіт',   path: '/analytics/overview',  Icon: Eye },
+      { label: 'Прогноз',           path: '/analytics/forecast',  Icon: TrendingUp },
+      { label: 'Цілі',              path: '/analytics/goals',     Icon: PieChart },
+      { label: 'Поведінка витрат',  path: '/analytics/patterns',  Icon: Activity },
+      { label: 'Аномалії',          path: '/analytics/anomalies', Icon: AlertTriangle },
+    ],
+  },
   { label: 'Рекомендації', path: '/recommendations',  Icon: Lightbulb },
 ];
 

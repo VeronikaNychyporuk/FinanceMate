@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import {
   TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -107,6 +108,7 @@ export default function AddRecurringTransactionPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate(from === 'budget' ? '/budgets' : '/recurring-transactions');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити регулярну транзакцію';

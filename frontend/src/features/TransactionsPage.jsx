@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { DateRangePicker } from '@tremor/react';
 import { useNavigate } from 'react-router-dom';
 import TransactionDetailsModal from '../components/TransactionDetailsModal';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([]);
@@ -162,6 +163,7 @@ export default function TransactionsPage() {
                 headers: { Authorization: `Bearer ${token}` }
             })
                 .then(() => {
+                    triggerRecommendationsRefresh();
                     setTransactions((prev) =>
                         prev.filter((tx) => tx._id !== selectedTransaction._id)
                     );

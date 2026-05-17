@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useBeforeUnload, useLocation } from 'react-router-dom';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import {
   TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -135,6 +136,7 @@ export default function EditTransactionPage() {
             'Content-Type': 'application/json'
         }
         });
+        triggerRecommendationsRefresh();
         navigate( from.startsWith('/budgets') || from === 'budgets'
           ? from
           : '/transactions');

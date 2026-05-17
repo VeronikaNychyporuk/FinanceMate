@@ -5,6 +5,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 
 export default function AddBudgetPage() {
   const navigate = useNavigate();
@@ -97,6 +98,7 @@ export default function AddBudgetPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate('/budgets');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити бюджет';

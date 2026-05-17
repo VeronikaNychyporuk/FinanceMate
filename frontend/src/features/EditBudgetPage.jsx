@@ -5,6 +5,7 @@ import {
 import { useNavigate, useParams, useBeforeUnload } from 'react-router-dom';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 
 export default function EditBudgetPage() {
   const { id } = useParams();
@@ -167,6 +168,7 @@ export default function EditBudgetPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate('/budgets');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося оновити бюджет';

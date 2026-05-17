@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation, useBeforeUnload } from 'react-router-dom';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import {
   TextField, MenuItem, Button, Autocomplete, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -143,6 +144,7 @@ export default function EditRecurringTransactionPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate(from);
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося оновити транзакцію';

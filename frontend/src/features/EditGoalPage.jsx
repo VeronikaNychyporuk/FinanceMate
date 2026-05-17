@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, useBeforeUnload } from 'react-router-dom';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import {
   TextField, Button, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
@@ -105,6 +106,7 @@ export default function EditGoalPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate('/goals');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося оновити ціль';

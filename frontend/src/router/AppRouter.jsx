@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import LandingPage from '../features/LandingPage';
 import LoginPage from '../features/LoginPage';
@@ -28,6 +28,7 @@ import EditRecurringTransactionPage from '../features/EditRecurringTransactionPa
 import AddRecurringTransactionPage from '../features/AddRecurringTransactionPage';
 import NotFoundPage from '../features/NotFoundPage';
 import RecommendationsPage from '../features/RecommendationsPage';
+import AnalyticsPage from '../features/AnalyticsPage';
 
 import Layout from '../components/Layout';
 import PrivateRoute from '../components/PrivateRoute';
@@ -62,6 +63,8 @@ function AppRouter() {
       <Route path="/recurring-transactions/edit/:id" element={<PrivateRoute><Layout><EditRecurringTransactionPage /></Layout></PrivateRoute>}/>
       <Route path="/recurring-transactions/new" element={<PrivateRoute><Layout><AddRecurringTransactionPage /></Layout></PrivateRoute>}/>
       <Route path="/recommendations" element={<PrivateRoute><Layout><RecommendationsPage /></Layout></PrivateRoute>} />
+      <Route path="/analytics" element={<Navigate to="/analytics/overview" replace />} />
+      <Route path="/analytics/:section" element={<PrivateRoute><Layout><AnalyticsPage /></Layout></PrivateRoute>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

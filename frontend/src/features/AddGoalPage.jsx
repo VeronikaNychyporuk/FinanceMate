@@ -3,6 +3,7 @@ import { TextField, Button, Dialog, DialogTitle, DialogContent, DialogActions } 
 import { DatePicker } from '@tremor/react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { triggerRecommendationsRefresh } from '../utils/triggerRecommendationsRefresh';
 import dayjs from 'dayjs';
 
 export default function AddGoalPage() {
@@ -69,6 +70,7 @@ export default function AddGoalPage() {
           'Content-Type': 'application/json'
         }
       });
+      triggerRecommendationsRefresh();
       navigate('/goals');
     } catch (err) {
       const msg = err.response?.data?.message || 'Не вдалося створити ціль';
